@@ -236,6 +236,10 @@ are not the same axis:
   failures and return an empty result (triggering fixture fallback) rather
   than retrying; a rate-limited GitHub call simply yields no live GitHub
   items for that run.
+- **The UI exposes one ordering, not four**: the page always ranks by Must
+  Know and prints the weights behind it under the title. `/api/stories`
+  still accepts `?sort=viral|credibility|impact|recent`, so restoring a
+  sort control is a frontend-only change.
 - **Korean text is machine translation, not editorial rewriting**
   (`src/translate/index.js`): the model is instructed to translate only and
   add nothing, but a mistranslated headline is possible. The original is

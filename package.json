@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "collect": "node scripts/collect.js",
+    "collect": "node --env-file-if-exists=.env scripts/collect.js",
     "serve": "node scripts/serve.js",
     "test": "node --test"
   },

@@ -12,16 +12,20 @@ import { firstSentences, topStories, localized, localizedRationale, relativeAge,
 
 const CATEGORIES = ['research', 'models', 'products', 'open-source', 'policy', 'funding', 'safety'];
 const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', fixture: 'Fixture' };
-const SORT_KEYS = ['mustknow', 'viral', 'credibility', 'impact', 'recent'];
+
+// One ranking, spelled out. The API still accepts ?sort=viral|credibility|
+// impact|recent (src/server), but four opaque sort options on screen raised
+// "what is this sorted by?" more often than they answered it — so the page
+// shows the Must Know order and states the weights behind it instead.
+const SORT = 'mustknow';
 
 const STRINGS = {
   ko: {
-    sort: '정렬',
     all: '전체',
     homeTitle: '오늘의 Must Know',
     homeTitleFiltered: (cat) => `${cat} — Must Know`,
     loading: '불러오는 중...',
-    storyCount: (n, sort) => `${n}개 스토리 · 정렬: ${sort}`,
+    storyCount: (n) => `${n}개 스토리 · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스)`,
     empty: '이 필터에 해당하는 스토리가 없습니다.',
     loadFailed: (msg) => `데이터를 불러오지 못했습니다: ${msg}`,
     notFound: '해당 스토리를 찾을 수 없습니다.',
@@ -42,13 +46,6 @@ const STRINGS = {
     footerPre: '모든 요약과 점수는 ',
     footerPost: ' 가 반환하는 실데이터를 기반으로 렌더링됩니다.',
     langToggle: 'EN',
-    sortLabels: {
-      mustknow: 'Must Know',
-      viral: '화제성',
-      credibility: '신뢰도',
-      impact: '중요도',
-      recent: '최신순',
-    },
     scoreLabels: {
       mustKnow: 'Must Know',
       viral: '화제성',
@@ -67,12 +64,11 @@ const STRINGS = {
     },
   },
   en: {
-    sort: 'Sort',
     all: 'All',
     homeTitle: "Today's Must Know",
     homeTitleFiltered: (cat) => `${cat} — Must Know`,
     loading: 'Loading...',
-    storyCount: (n, sort) => `${n} stories · sorted by ${sort}`,
+    storyCount: (n) => `${n} stories · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus)`,
     empty: 'No stories match this filter.',
     loadFailed: (msg) => `Could not load data: ${msg}`,
     notFound: 'Story not found.',
@@ -93,13 +89,6 @@ const STRINGS = {
     footerPre: 'Every summary and score is rendered from live data returned by ',
     footerPost: '.',
     langToggle: '한국어',
-    sortLabels: {
-      mustknow: 'Must Know',
-      viral: 'Viral',
-      credibility: 'Credibility',
-      impact: 'Impact',
-      recent: 'Most recent',
-    },
     scoreLabels: {
       mustKnow: 'Must Know',
       viral: 'Viral',
@@ -124,7 +113,7 @@ const STRINGS = {
 // glance rather than needing a sort/filter round-trip per story.
 const TOP_N = 24;
 
-const state = { sort: 'mustknow', category: '', lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
+const state = { category: '', lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
 
 const t = () => STRINGS[state.lang];
 
@@ -133,8 +122,6 @@ const detailView = document.getElementById('detail-view');
 const cardGrid = document.getElementById('card-grid');
 const homeStatus = document.getElementById('home-status');
 const homeTitle = document.getElementById('home-title');
-const sortSelect = document.getElementById('sort-select');
-const sortLabel = document.getElementById('sort-label');
 const chipsContainer = document.getElementById('category-chips');
 const asOfEl = document.getElementById('data-asof');
 const footerNote = document.getElementById('footer-note');
@@ -240,7 +227,7 @@ function renderCard(view) {
 }
 
 async function fetchStories() {
-  const params = new URLSearchParams({ sort: state.sort });
+  const params = new URLSearchParams({ sort: SORT });
   if (state.category) params.set('category', state.category);
   const res = await fetch(`/api/stories?${params}`);
   if (!res.ok) throw new Error(`API error ${res.status}`);
@@ -264,7 +251,7 @@ async function renderHome() {
       cardGrid.innerHTML = `<div class="empty-box">${escapeHtml(t().empty)}</div>`;
       return;
     }
-    homeStatus.textContent = t().storyCount(top.length, t().sortLabels[state.sort]);
+    homeStatus.textContent = t().storyCount(top.length);
     cardGrid.innerHTML = top.map(renderCard).join('');
   } catch (err) {
     homeStatus.textContent = '';
@@ -381,11 +368,6 @@ function route() {
 function applyLanguage() {
   document.documentElement.lang = state.lang;
   document.getElementById('lang-toggle').textContent = t().langToggle;
-  sortLabel.textContent = t().sort;
-
-  const selected = sortSelect.value || state.sort;
-  sortSelect.innerHTML = SORT_KEYS.map((key) => `<option value="${key}">${escapeHtml(t().sortLabels[key])}</option>`).join('');
-  sortSelect.value = selected;
 
   for (const chip of chipsContainer.querySelectorAll('.chip')) {
     chip.textContent = chip.dataset.category ? t().categories[chip.dataset.category] : t().all;
@@ -411,11 +393,6 @@ function buildCategoryChips() {
 
 function initControls() {
   buildCategoryChips();
-
-  sortSelect.addEventListener('change', () => {
-    state.sort = sortSelect.value;
-    renderHome();
-  });
 
   chipsContainer.addEventListener('click', (e) => {
     const btn = e.target.closest('.chip');
