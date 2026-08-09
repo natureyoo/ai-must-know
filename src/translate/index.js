@@ -15,8 +15,13 @@ const ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const BATCH_SIZE = 12;
 
+// Bump when SYSTEM_PROMPT changes in a way that should regenerate existing
+// Korean text. The hash covers it, so a bump re-translates everything once
+// (and only once) instead of leaving old output frozen in the DB forever.
+const PROMPT_VERSION = 2;
+
 export function contentHash(item) {
-  return createHash('sha1').update(`${item.title}\n${item.summary}`).digest('hex').slice(0, 16);
+  return createHash('sha1').update(`v${PROMPT_VERSION}\n${item.title}\n${item.summary}`).digest('hex').slice(0, 16);
 }
 
 // gistKo is the card's lead line: the one sentence that tells a reader what
@@ -26,7 +31,7 @@ const SYSTEM_PROMPT = `You translate AI-industry news for a Korean-speaking engi
 
 For each input item return:
 - titleKo: the headline in natural Korean. Keep product names, model names, company names, and version numbers in their original form (GPT-5.2, Claude, Hugging Face). Do not add words that are not in the original.
-- gistKo: ONE Korean sentence, 40 characters or fewer, saying what actually happened — the single fact a reader needs. No marketing tone, no "~에 대한 소식", no trailing ellipsis.
+- gistKo: ONE Korean sentence ending in 합니다/했습니다, 60 characters or fewer, saying what concretely happened. It MUST carry the specific detail — who, what thing, and any number, model name, version, or amount present in the input. "OpenAI가 새로운 결과를 발표했습니다" is a failure; "OpenAI가 수학 난제 10건에서 새 결과를 냈다고 발표했습니다" is correct. No marketing tone, no "~에 대한 소식", no trailing ellipsis. If the input genuinely contains no specifics, state the most concrete thing it does say rather than padding.
 - summaryKo: what the original says, compressed to AT MOST 2 Korean sentences, plain 합니다체. Keep the concrete specifics (numbers, model names, who did what) and drop framing, background, and repetition. This is read after gistKo, so it must add detail rather than restate it.
 
 Translate only. Never add facts, figures, or judgements that are absent from the input.
