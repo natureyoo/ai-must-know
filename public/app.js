@@ -8,7 +8,7 @@
 // below. Every localized read goes through logic.js's `localized()`, which
 // falls back to the English original when a translation is missing.
 
-import { firstSentences, topStories, localized, localizedRationale, relativeAge, isStale } from './logic.js';
+import { topStories, localized, localizedRationale, cardLead, cardBrief, relativeAge, isStale } from './logic.js';
 
 const CATEGORIES = ['research', 'models', 'products', 'open-source', 'policy', 'funding', 'safety'];
 const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', fixture: 'Fixture' };
@@ -35,6 +35,8 @@ const STRINGS = {
     asOfSchedule: '매일 오전 5시(KST) 자동 갱신',
     source: '원문',
     evidence: '근거',
+    briefToggle: '원문 요약',
+    published: (date, ago) => `발행 ${date} · ${ago}`,
     whyScore: '점수 산출 근거 보기',
     whyVerification: '검증 판단 이유',
     independentSources: (n) => `독립 출처 ${n}개`,
@@ -78,6 +80,8 @@ const STRINGS = {
     asOfSchedule: 'refreshed daily at 05:00 KST',
     source: 'Original',
     evidence: 'Evidence',
+    briefToggle: 'Summary',
+    published: (date, ago) => `Published ${date} · ${ago}`,
     whyScore: 'Why these scores?',
     whyVerification: 'Why this verification status?',
     independentSources: (n) => `${n} independent source${n === 1 ? '' : 's'}`,
@@ -145,6 +149,17 @@ function formatKst(iso) {
   }) + ' KST';
 }
 
+// When the story broke, in KST like the as-of stamp, plus how long ago —
+// "8월 8일" alone does not tell a reader whether that is old news.
+function publishedLine(iso) {
+  const date = new Date(iso).toLocaleDateString(state.lang === 'ko' ? 'ko-KR' : 'en-US', {
+    timeZone: 'Asia/Seoul',
+    month: 'long',
+    day: 'numeric',
+  });
+  return t().published(date, relativeAge(iso, new Date(), state.lang));
+}
+
 function categoryLabel(category) {
   return t().categories[category] || category || 'uncategorized';
 }
@@ -185,6 +200,8 @@ function rationaleList(scores) {
 function renderCard(view) {
   const s = view.scores;
   const text = localized(view, state.lang);
+  const lead = cardLead(text);
+  const brief = cardBrief(text);
   const platforms = view.platforms.map((p) => `<span class="platform-tag">${PLATFORM_LABELS[p] || p}</span>`).join('');
   const primary = view.sources[0];
   const evidenceLinks = view.sources
@@ -207,8 +224,9 @@ function renderCard(view) {
         </div>
       </div>
       <h2 class="card-title"><a href="#/story/${encodeURIComponent(view.id)}">${escapeHtml(text.title)}</a></h2>
-      ${text.gist ? `<p class="card-gist">${escapeHtml(text.gist)}</p>` : ''}
-      ${text.summary ? `<p class="card-summary">${escapeHtml(firstSentences(text.summary, 3))}</p>` : ''}
+      <p class="card-date">${escapeHtml(publishedLine(view.firstPublishedAt))}</p>
+      ${lead ? `<p class="card-gist">${escapeHtml(lead)}</p>` : ''}
+      ${brief ? `<details class="rationale card-brief"><summary>${escapeHtml(t().briefToggle)}</summary><p>${escapeHtml(brief)}</p></details>` : ''}
       <div class="score-pills">${scorePills(s)}</div>
       <details class="rationale">
         <summary>${escapeHtml(t().whyVerification)}</summary>
@@ -317,6 +335,7 @@ async function renderDetail(id) {
       <div class="detail-header">
         <span class="${badgeClass(view.verification.status)}">${escapeHtml(text.verificationLabel)}</span>
         <h1>${escapeHtml(text.title)}</h1>
+        <p class="card-date">${escapeHtml(publishedLine(view.firstPublishedAt))}</p>
         ${text.gist ? `<p class="card-gist">${escapeHtml(text.gist)}</p>` : ''}
         ${text.summary ? `<p class="card-summary">${escapeHtml(text.summary)}</p>` : ''}
         <p class="verification-reason">${escapeHtml(text.verificationReason)} (${escapeHtml(t().independentSources(view.verification.independentSourceCount))})</p>

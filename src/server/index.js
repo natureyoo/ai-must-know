@@ -50,6 +50,10 @@ export function buildStoryView(story, scored, translations = new Map()) {
   const canonical = items[0];
   const platforms = [...new Set(items.map((i) => i.sourceType))];
   const latestPublishedAt = items.reduce((max, i) => Math.max(max, Date.parse(i.publishedAt)), 0);
+  // When the story first broke, across every source that covers it. The card
+  // shows this rather than latestPublishedAt: a follow-up repost should not
+  // make a three-day-old story read as published today.
+  const firstPublishedAt = items.reduce((min, i) => Math.min(min, Date.parse(i.publishedAt)), Infinity);
 
   // Korean text (src/translate) is stored per source item, while the story's
   // title and summary can come from two different items — so each is looked
@@ -68,6 +72,7 @@ export function buildStoryView(story, scored, translations = new Map()) {
     gistKo: bodyTr?.gistKo ?? null,
     category: storyCategory(items),
     platforms,
+    firstPublishedAt: new Date(firstPublishedAt).toISOString(),
     latestPublishedAt: new Date(latestPublishedAt).toISOString(),
     verification: scored.verification,
     scores: scored.scores,

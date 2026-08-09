@@ -81,7 +81,14 @@ three fields per item in the `translations` table:
 - `gistKo` — a **one-sentence, ≤40-character** summary of what actually
   happened; this is the line the card is built around, so the grid can be
   read without opening anything,
-- `summaryKo` — the full summary in Korean.
+- `summaryKo` — the original's content compressed to **at most 2 sentences**,
+  shown only when the reader opens the card's `원문 요약` toggle.
+
+A closed card is therefore: verification badge, category, platforms, the
+headline, `발행 <date> · <N일 전>` (the story's earliest publication across
+its sources, so a later repost cannot make old news look new), the one-line
+gist, and the four scores. Everything else — the original's summary, the
+verification reasoning, all five score rationales — sits behind toggles.
 
 Work is keyed on a SHA-1 of `title + summary`, so a daily re-collect only
 pays for genuinely new or edited items. Everything the app generates itself

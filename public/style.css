@@ -206,6 +206,8 @@ select {
   padding-left: 10px;
 }
 
+.card-date { margin: -4px 0 0; font-size: 0.74rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
 .card-summary { margin: 0; color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; }
 
 .badge {
@@ -271,6 +273,10 @@ select {
 details.rationale { font-size: 0.72rem; color: var(--text-muted); }
 details.rationale summary { cursor: pointer; color: var(--accent); }
 details.rationale p { margin: 4px 0 0; }
+/* The 원문 요약 toggle carries actual reading content, not a footnote, so it
+   keeps body-text size while the score/verification toggles stay small. */
+.card-brief p { font-size: 0.85rem; line-height: 1.55; color: var(--text-muted); }
+
 .rationale-list { margin: 6px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 5px; }
 .rationale-list b { color: var(--text); }
 

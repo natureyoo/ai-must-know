@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { firstSentences, topStories, localized, localizedRationale, relativeAge, isStale } from '../public/logic.js';
+import { firstSentences, topStories, localized, localizedRationale, cardLead, cardBrief, relativeAge, isStale } from '../public/logic.js';
 import { getFixtureItems } from '../src/adapters/fixtures/index.js';
 
 const VIEW = {
@@ -94,6 +94,28 @@ test('a summary that merely repeats the title is dropped instead of printed twic
   assert.equal(localized(echoed, 'en').summary, '', 'whitespace/case differences still count as the same text');
   assert.equal(localized(echoed, 'ko').summary, '');
   assert.equal(localized(VIEW, 'ko').summary, 'OpenAI가 오늘 GPT-5.2를 공개했습니다.', 'a real summary survives');
+});
+
+test('the closed card shows only the gist; the original content stays in the toggle', () => {
+  const text = localized(VIEW, 'ko');
+  assert.equal(cardLead(text), 'OpenAI가 GPT-5.2를 공개했습니다');
+  assert.equal(cardBrief(text), 'OpenAI가 오늘 GPT-5.2를 공개했습니다.');
+});
+
+test('a one-sentence summary still gets its own toggle rather than being promoted to the card', () => {
+  const untranslated = localized({ ...VIEW, titleKo: null, summaryKo: null, gistKo: null }, 'ko');
+  assert.equal(cardLead(untranslated), '', 'no gist yet → the closed card is headline-only');
+  assert.equal(cardBrief(untranslated), 'OpenAI released GPT-5.2 today.');
+});
+
+test('the toggle is dropped only when there is genuinely nothing to reveal', () => {
+  assert.equal(cardBrief({ gist: 'OpenAI가 GPT-5.2를 공개했습니다', summary: '' }), '', 'a title-echo summary leaves nothing to expand');
+  assert.equal(cardBrief({ gist: '같은 문장입니다.', summary: '같은 문장입니다.' }), '', 'never open a toggle onto the line already on the card');
+});
+
+test('the toggle caps the original at two sentences, however long the source is', () => {
+  const long = { gist: '', summary: 'One. Two. Three. Four.' };
+  assert.equal(cardBrief(long), 'One. Two.');
 });
 
 test('score rationales follow the language, falling back to English when untranslated', () => {

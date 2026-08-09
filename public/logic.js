@@ -43,6 +43,21 @@ export function localized(view, lang = 'ko') {
   };
 }
 
+// A closed card shows the headline and, when translated, one line of gist.
+// Nothing else — the body of the original stays behind the toggle below, so
+// the grid can be scanned without reading paragraphs.
+export function cardLead(text) {
+  return text.gist;
+}
+
+// What the "원문 요약" toggle reveals: the original's content in at most two
+// sentences. Empty only when there is nothing to add — no summary at all, or
+// a summary the gist already says.
+export function cardBrief(text) {
+  const brief = firstSentences(text.summary, 2);
+  return brief === cardLead(text) ? '' : brief;
+}
+
 export function localizedRationale(score, lang = 'ko') {
   return (lang === 'ko' && score.rationaleKo) || score.rationale;
 }
