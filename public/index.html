@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Must Know</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/">AI Must Know</a>
+  <div class="topbar-right">
+    <p id="data-asof" class="data-asof" aria-live="polite"></p>
+    <button id="lang-toggle" type="button" aria-label="Switch language">EN</button>
+    <button id="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
+  </div>
+</header>
+
+<main id="app">
+  <section id="home-view">
+    <div class="controls">
+      <div class="control-group" role="group" aria-label="Sort">
+        <label for="sort-select" id="sort-label">정렬</label>
+        <select id="sort-select">
+          <option value="mustknow">Must Know</option>
+          <option value="viral">Viral</option>
+          <option value="credibility">Credibility</option>
+          <option value="impact">Impact</option>
+          <option value="recent">최신순</option>
+        </select>
+      </div>
+      <div class="control-group category-chips" id="category-chips" role="group" aria-label="Category filter">
+        <button type="button" class="chip active" data-category="">All</button>
+      </div>
+    </div>
+    <h1 id="home-title">오늘의 Must Know</h1>
+    <p id="home-status" class="status-line" aria-live="polite"></p>
+    <div id="card-grid" class="card-grid"></div>
+  </section>
+
+  <section id="detail-view" hidden></section>
+</main>
+
+<footer class="site-footer">
+  <p id="footer-note">모든 요약과 점수는 <a href="/api/stories">/api/stories</a> API가 반환하는 실데이터를 기반으로 렌더링됩니다.</p>
+</footer>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

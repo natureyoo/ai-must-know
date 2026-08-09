@@ -1,0 +1,257 @@
+# AI Must Know
+
+Local AI news curation dashboard. Collects AI news from official RSS/feeds,
+Hacker News, and GitHub, merges duplicate coverage into stories, and scores
+each story on virality, publisher influence, credibility, and industry
+impact — with a visible verification status for every claim.
+
+## Install
+
+Requires Node.js >= 22 (uses `node:sqlite` and `node:test`, no other
+runtime dependency). This project has zero npm dependencies.
+
+```
+npm install
+```
+
+## Run
+
+Collection and serving are separate commands, so you can run a collection
+on a schedule (e.g. cron) without keeping a web server alive, and vice versa.
+
+```
+npm run collect   # fetch/refresh data into the local SQLite DB, then exit
+npm run serve     # start the web server, reading from that DB
+```
+
+`npm run collect` runs the RSS, Hacker News, and GitHub adapters live. Each
+source is independent: if a source's live fetch fails or returns nothing
+(no network, feed down, API error), that source alone falls back to its
+bundled fixture items — the other sources still use live data. This means
+the app is fully usable offline (all three sources fall back to fixtures)
+and works with no setup at all: first run, empty DB, no `.env` file.
+
+`npm run collect` also renders new items into Korean (see **Language**
+below) when `OPENAI_API_KEY` is set.
+
+`npm run serve` starts an HTTP server (default `http://localhost:3000`)
+serving both the dashboard (`public/`) and the JSON API it calls
+(`/api/stories`, `/api/stories/:id`). It only reads from the DB; it never
+collects.
+
+## Daily updates
+
+`.github/workflows/daily.yml` runs the whole chain on GitHub Actions every
+day at **20:00 UTC = 05:00 KST**: `npm run collect` → `node
+scripts/build-static.js dist` → deploy to GitHub Pages. It can also be
+triggered by hand from the Actions tab (`workflow_dispatch`), and runs on
+every push to `main`.
+
+Setup on a fresh repo:
+
+1. Settings → Pages → Source: **GitHub Actions**.
+2. Settings → Secrets and variables → Actions → new secret
+   `OPENAI_API_KEY` (optional — without it the site is English-only).
+
+The SQLite DB is carried between runs with `actions/cache`, so previous
+days' stories stay in the pool and already-translated items are never paid
+for twice. A cache miss is not a failure: the run just collects from
+scratch. Note that GitHub queues scheduled workflows and can start them
+late under load, so 05:00 KST is "soon after", not exact — which is
+precisely why the page stamps its real as-of time rather than the intended
+one.
+
+**Every page shows what it is a snapshot of.** The header renders `데이터
+기준 <newest collectedAt> KST · N시간 전`, taken from `MAX(collectedAt)` in
+the DB (`latestCollectedAt`), not from build or request time — rebuilding
+without collecting cannot make stale data look fresh. If that stamp is more
+than 30 hours old (i.e. a daily run was missed), it turns orange and reads
+`갱신 지연`.
+
+## Language
+
+The dashboard defaults to **Korean**; the header toggle switches to English
+and the choice is remembered in `localStorage`.
+
+Sources publish in English, so `src/translate/index.js` renders each
+collected item into Korean during collection via the OpenAI API, storing
+three fields per item in the `translations` table:
+
+- `titleKo` — the headline in Korean (product/model names left intact),
+- `gistKo` — a **one-sentence, ≤40-character** summary of what actually
+  happened; this is the line the card is built around, so the grid can be
+  read without opening anything,
+- `summaryKo` — the full summary in Korean.
+
+Work is keyed on a SHA-1 of `title + summary`, so a daily re-collect only
+pays for genuinely new or edited items. Everything the app generates itself
+(verification statuses and reasoning, all five score rationales) is written
+in both languages directly in `src/verification` and `src/scoring` — no API
+call involved, so the explanations are always readable in Korean even when
+translation is off.
+
+Translation is entirely optional. With no `OPENAI_API_KEY`, a failing API,
+or a malformed response, the affected stories simply keep their English
+original and are tagged `원문(영어)` in the UI. Collection never fails
+because of translation.
+
+## Test
+
+```
+npm test
+```
+
+Runs the full suite via the built-in `node --test` runner. Covers dedup
+(same-URL and similar-title merging), all four scores plus the Must-Know
+score, the five verification states (including the independent-source and
+company-claim rules), the live-adapter fixture fallback path, the
+translation cache (no key, unchanged items, edited items, API failure,
+malformed response), and the Korean/English fallback + as-of staleness
+logic the UI renders.
+
+## Environment variables
+
+See `.env.example`. All are optional — the app runs with none of them set.
+
+| Variable | Used in | Purpose |
+|---|---|---|
+| `GITHUB_TOKEN` | `src/adapters/github/index.js` | GitHub personal access token, sent as a `Bearer` header on the repo-search request to raise the public API's rate limit. Collection still works unauthenticated, just at GitHub's lower unauthenticated limit. |
+| `OPENAI_API_KEY` | `src/translate/index.js` | Used by `npm run collect` to render titles/summaries in Korean. Unset → the dashboard falls back to the English original per story. |
+| `OPENAI_MODEL` | `src/translate/index.js` | Model used for that translation. Defaults to `gpt-4o-mini`. |
+| `DB_PATH` | `scripts/collect.js`, `scripts/serve.js` | Filesystem path to the local SQLite database file. Defaults to `data/app.db`. |
+| `PORT` | `scripts/serve.js` | HTTP port for the web server. Defaults to `3000`. |
+
+No API key is ever required to run the app — RSS and Hacker News need none,
+and GitHub's public search API works without one.
+
+## Data sources
+
+- **Official RSS/Atom feeds** (`src/adapters/rss/index.js`): OpenAI News,
+  Google DeepMind Blog, and Hugging Face Blog — first-party feeds, not
+  aggregators. Hand-rolled regex XML parsing (no dependency).
+- **Hacker News** (`src/adapters/hackernews/index.js`): the official
+  Firebase API (`hacker-news.firebaseio.com`), no key needed. Pulls current
+  top stories and keeps ones matching an AI-related keyword filter.
+- **GitHub** (`src/adapters/github/index.js`): the public REST search API
+  (`api.github.com/search/repositories`). GitHub has no official "trending"
+  endpoint, so this approximates it: repos tagged `artificial-intelligence`
+  pushed in the last 7 days, sorted by stars.
+- **Fixtures** (`src/adapters/fixtures/index.js`): 19 hand-written, realistic
+  items covering all 7 categories, with deliberately engineered same-URL
+  duplicates, similar-title duplicates, cross-platform overlaps, a disputed
+  pair, and an unverified claim. Used automatically whenever a live source
+  returns nothing (see `src/collect/index.js`), and directly by the test
+  suite for deterministic assertions.
+
+## Scoring methodology
+
+Every story gets four independently computed 0–100 scores plus a derived
+Must-Know score (`src/scoring/index.js`). Each score's UI display includes
+a plain-language rationale explaining the specific numbers behind it.
+
+- **Viral**: the best-placed constituent item's *reactions-per-hour-since-
+  publish*, converted to a percentile rank against other items on the same
+  platform (not raw totals — this stops an old post from winning purely by
+  having accumulated more reactions than a fast-rising new one), plus a
+  bonus (up to +20) for appearing on multiple platforms.
+- **Publisher influence**: a base score by publisher type (government 80,
+  company 75, independent-media 70, research-org 65, community 35),
+  adjusted by observed reach (GitHub stars or estimated reads) where
+  available. This never looks at verification status.
+- **Credibility**: derived directly from the verification status (see
+  below) — Verified 90, Reported 65, Official claim 45, Disputed 30,
+  Unverified 20, with a small bonus for more than 2 independent sources.
+  This never looks at publisher influence or reach, so a highly-influential
+  publisher cannot buy a high credibility score by itself.
+- **Industry impact**: a category weight (Safety 90, Research 85, Models
+  80, Policy 80, Funding 65, Open Source 60, Products 55) blended with the
+  story's engagement percentile within its platform, plus a small bonus for
+  multi-platform coverage.
+- **Must-Know score**: a weighted blend of all four — viral ×0.3 +
+  influence ×0.15 + credibility ×0.3 + impact ×0.25 — so influence alone
+  cannot dominate the ranking.
+
+Percentiles are always computed within the current collection batch (e.g.
+"this HN item's rate vs. every other HN item just collected"), not against
+a fixed historical baseline.
+
+**Known simplification**: "hourly rate" is `total reactions ÷ hours since
+publish` from a single snapshot, not a true time-series growth rate — there's
+no repeated-collection history to compute a real delta from yet. This is
+a reasonable proxy (old stale posts score low, fast-rising new ones score
+high) but would improve once `collect` runs on a schedule and stores
+reaction counts over time.
+
+## Verification states
+
+Every story is assigned exactly one of five states
+(`src/verification/index.js`), shown as a badge with a reasoning string:
+
+- **Verified** — at least 2 independent, non-company sources corroborate it.
+- **Official claim** — only the announcing company/companies have published
+  it; no independent corroboration yet.
+- **Reported** — exactly 1 independent, credible source covers it (short of
+  the 2 required for Verified).
+- **Disputed** — one source's content conflicts with another's account of
+  the same story.
+- **Unverified** — only community-sourced or unconfirmed material exists;
+  no official source and no credible independent reporting.
+
+Two rules enforce the task's core principle that influence and factuality
+are not the same axis:
+
+1. **A company's own announcement is never counted as independent
+   corroboration of itself**, no matter how many times it's reposted or how
+   influential the company is. It establishes only that the announcement
+   was made — not that any performance/capability claim inside it is true.
+   A story with only company-sourced items caps at *Official claim*, never
+   *Verified*.
+2. **Verified requires >= 2 independent sources**, where "source" means a
+   distinct publisher, not a distinct URL — items that merely repost the
+   same URL (e.g. an HN submission linking to the same article) collapse
+   into one origin and count once.
+
+## Limitations
+
+- **Dedup is a title-similarity heuristic, not semantic matching**
+  (`src/processing/dedup.js`): items merge into one story if they share a
+  URL, or if their titles clear a word-overlap (Jaccard) threshold of 0.3.
+  This can under-merge genuine same-event coverage that uses very different
+  wording (e.g. a terse HN title vs. a descriptive press headline), leaving
+  it as two separate, lower-signal stories instead of one corroborated one.
+- **Dispute detection is lexical, not a real claim-diff**: it looks for
+  conflict-language patterns ("disputed", "denies", "fails to reproduce",
+  etc.) between items, not an actual comparison of what each source claims.
+- **RSS coverage is 3 fixed official feeds**, not a general web crawl —
+  broader coverage would mean adding more feeds to
+  `src/adapters/rss/index.js`.
+- **GitHub "trending" is an approximation**: there is no official trending
+  endpoint, so this uses topic + recency + star-sort via the search API,
+  and cannot reliably distinguish an official org repo from an individual's
+  (so GitHub items are always treated as `community` publisher type, never
+  counted as a company's own claim).
+- **No historical reaction snapshots**: viral scoring uses a single-snapshot
+  rate proxy (see Scoring methodology above) rather than a true growth rate.
+- **No auth or rate-limit backoff beyond what's coded**: adapters catch
+  failures and return an empty result (triggering fixture fallback) rather
+  than retrying; a rate-limited GitHub call simply yields no live GitHub
+  items for that run.
+- **Korean text is machine translation, not editorial rewriting**
+  (`src/translate/index.js`): the model is instructed to translate only and
+  add nothing, but a mistranslated headline is possible. The original is
+  always one toggle away, and every card links the 원문, so the English
+  source stays the authority. Stories collected before a key was configured
+  keep showing English until their source text changes.
+- **The one-line gist is generated, not sourced**: `gistKo` is the model's
+  compression of the item's own title and summary. It can only be as
+  accurate as that input — it is a scanning aid, not a claim of its own,
+  which is why the verification badge is rendered next to it rather than
+  derived from it.
+- **Daily freshness depends on GitHub's scheduler**: cron runs can be
+  delayed or (on a repo with no activity for 60 days) suspended entirely.
+  The as-of stamp and its `갱신 지연` state exist so a stalled schedule is
+  visible on the page instead of silently serving old news as today's.
+- **Source adapters are independently pluggable but only three are
+  implemented** (RSS, Hacker News, GitHub) — the shared `SourceItem`
+  contract (`src/adapters/sourceItem.js`) is designed so Reddit, YouTube, or
+  X adapters can be added later without changing dedup/scoring/verification.

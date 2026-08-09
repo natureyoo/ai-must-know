@@ -1,0 +1,17 @@
+{
+  "name": "ai-must-know",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local AI news curation dashboard: collects AI news from RSS, Hacker News, and GitHub, dedups into stories, and scores them for virality, publisher influence, credibility, and industry impact.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "collect": "node scripts/collect.js",
+    "serve": "node scripts/serve.js",
+    "test": "node --test"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

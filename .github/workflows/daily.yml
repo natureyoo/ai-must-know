@@ -1,0 +1,67 @@
+# Daily collection + deploy. Without this the published site only ever shows
+# whatever was in the DB when it was built by hand.
+#
+# collect and build are separate commands (see package.json), so this runs
+# them in order: collect refreshes the SQLite DB and translates new items,
+# build-static snapshots that DB into flat JSON, deploy publishes it.
+name: daily
+
+on:
+  schedule:
+    # 20:00 UTC = 05:00 KST. GitHub queues scheduled runs and can start them
+    # late under load, so treat 05:00 as "soon after", not exact — the page
+    # always shows its real as-of stamp rather than the intended time.
+    - cron: '0 20 * * *'
+  workflow_dispatch: # run it now from the Actions tab
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let a manual run and the nightly run deploy over each other.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  collect-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24' # node:sqlite is available without a flag from 23.4
+
+      # Carries the DB between runs, so yesterday's stories stay in the mix
+      # and already-translated items are not paid for twice. The key changes
+      # every run so each run saves a fresh copy; restore-keys picks up the
+      # newest previous one. A cache miss is not a failure — it just means
+      # collecting from scratch.
+      - uses: actions/cache@v4
+        with:
+          path: data/app.db
+          key: aimustknow-db-${{ github.run_id }}
+          restore-keys: aimustknow-db-
+
+      - name: Collect and translate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # raises the GitHub API rate limit
+        run: npm run collect
+
+      - name: Build static snapshot
+        run: node scripts/build-static.js dist
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
