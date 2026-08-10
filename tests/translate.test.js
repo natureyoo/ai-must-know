@@ -242,3 +242,25 @@ test('a rejected model id falls back instead of losing the whole run to a typo',
   assert.deepEqual(seen, ['gpt-does-not-exist', 'gpt-4o-mini']);
   db.close();
 });
+
+test('retention drops aged-out items and the translations that belonged to them', async () => {
+  const { pruneOldItems, countSourceItems } = await import('../src/db/index.js');
+  const db = openDb(':memory:');
+  const [fresh, old] = items(2);
+
+  upsertSourceItems(db, [
+    { ...fresh, publishedAt: '2026-08-01T00:00:00.000Z', collectedAt: '2026-08-09T00:00:00.000Z' },
+    { ...old, publishedAt: '2025-09-22T00:00:00.000Z', collectedAt: '2026-08-09T00:00:00.000Z' },
+  ]);
+  const { fetchImpl } = fakeOpenAI();
+  await translateItems(db, [fresh, old], { apiKey: 'sk-test', fetchImpl, log: () => {}, getArticleTexts: noArticles });
+  assert.equal(getTranslations(db).size, 2);
+
+  const removed = pruneOldItems(db, new Date('2026-02-11T00:00:00.000Z'));
+
+  assert.equal(removed, 1);
+  assert.equal(countSourceItems(db), 1, 'the fresh item survives');
+  assert.ok(!getTranslations(db).has(old.id), 'its translation goes with it, so nothing is orphaned');
+  assert.ok(getTranslations(db).has(fresh.id));
+  db.close();
+});

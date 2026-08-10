@@ -107,6 +107,18 @@ export function countSourceItems(db) {
   return db.prepare('SELECT COUNT(*) AS n FROM source_items').get().n;
 }
 
+// Upsert never deletes, so without this the pool only ever grows: an
+// abandoned feed's archive (or an item stored under an older adapter's
+// rules) would stay in the rankings forever. Drops items published before
+// `before`, and the translations that belonged to them.
+export function pruneOldItems(db, before) {
+  const cutoff = before instanceof Date ? before.toISOString() : before;
+  const removed = db.prepare('SELECT COUNT(*) AS n FROM source_items WHERE publishedAt < ?').get(cutoff).n;
+  db.prepare('DELETE FROM translations WHERE id IN (SELECT id FROM source_items WHERE publishedAt < ?)').run(cutoff);
+  db.prepare('DELETE FROM source_items WHERE publishedAt < ?').run(cutoff);
+  return removed;
+}
+
 // "이 데이터는 언제 기준인가" — the newest collectedAt across every stored
 // item. The UI shows this as the as-of stamp, and the static build embeds it
 // in the snapshot, so a page served hours later never implies it is live.

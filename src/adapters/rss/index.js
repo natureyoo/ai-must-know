@@ -88,7 +88,8 @@ function idFor(url) {
   return `rss-${createHash('sha1').update(url).digest('hex').slice(0, 16)}`;
 }
 
-async function fetchOneFeed(feed, { fetchImpl, now, timeoutMs, maxPerFeed }) {
+async function fetchOneFeed(feed, { fetchImpl, now, timeoutMs, maxPerFeed, maxAgeDays }) {
+  const cutoff = now.getTime() - maxAgeDays * 24 * 3600 * 1000;
   try {
     const res = await fetchImpl(feed.url, { signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) return [];
@@ -106,6 +107,10 @@ async function fetchOneFeed(feed, { fetchImpl, now, timeoutMs, maxPerFeed }) {
       const rawDate = extractTag(block, 'pubDate') || extractTag(block, 'published') || extractTag(block, 'updated');
       const publishedMs = Date.parse(rawDate);
       if (Number.isNaN(publishedMs)) continue;
+      // Abandoned and archive-publishing feeds otherwise fill the pool with
+      // year-old posts: qwenlm.github.io's feed still serves 44 entries whose
+      // newest is from 2025-09, which arrived looking like fresh coverage.
+      if (publishedMs < cutoff) continue;
 
       const summary = extractTag(block, 'description') || extractTag(block, 'summary') || extractTag(block, 'content') || title;
 
@@ -136,7 +141,7 @@ async function fetchOneFeed(feed, { fetchImpl, now, timeoutMs, maxPerFeed }) {
   }
 }
 
-export async function fetchRssItems({ fetchImpl = fetch, feeds = DEFAULT_FEEDS, now = new Date(), timeoutMs = 8000, maxPerFeed = 25 } = {}) {
-  const results = await Promise.all(feeds.map((feed) => fetchOneFeed(feed, { fetchImpl, now, timeoutMs, maxPerFeed })));
+export async function fetchRssItems({ fetchImpl = fetch, feeds = DEFAULT_FEEDS, now = new Date(), timeoutMs = 8000, maxPerFeed = 25, maxAgeDays = 120 } = {}) {
+  const results = await Promise.all(feeds.map((feed) => fetchOneFeed(feed, { fetchImpl, now, timeoutMs, maxPerFeed, maxAgeDays })));
   return results.flat();
 }

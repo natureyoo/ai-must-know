@@ -62,7 +62,12 @@ export async function fetchHuggingFaceModels({
   fetchImpl = fetch,
   now = new Date(),
   limit = 60,
-  maxAgeDays = 30,
+  // A model that shipped seven weeks ago and is still the most-liked thing
+  // on the Hub is news this dashboard should carry — Kimi-K3 (57 days,
+  // 10.4k likes) and GLM-5.2 (54 days, 4.9k) were both being dropped by a
+  // 30-day cutoff. The page's own recency filter then decides visibility,
+  // against the model's real publication date.
+  maxAgeDays = 120,
   minLikes = 20,
   // Trending is full of community quants and fine-tunes of the week's hit
   // model ("...-GGUF", "...-Uncensored-v7"), which are downstream of the news

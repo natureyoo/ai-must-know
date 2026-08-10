@@ -167,6 +167,7 @@ See `.env.example`. All are optional — the app runs with none of them set.
 | `GITHUB_TOKEN` | `src/adapters/github/index.js` | GitHub personal access token, sent as a `Bearer` header on the repo-search request to raise the public API's rate limit. Collection still works unauthenticated, just at GitHub's lower unauthenticated limit. |
 | `OPENAI_API_KEY` | `src/translate/index.js` | Used by `npm run collect` to render titles/summaries in Korean. Unset → the dashboard falls back to the English original per story. |
 | `OPENAI_MODEL` | `src/translate/index.js` | Model used for translation and the AI take. Defaults to `gpt-4o`; falls back to `gpt-4o-mini` if the id is rejected. |
+| `RETENTION_DAYS` | `scripts/collect.js` | Days of history to keep; items published before that are deleted after each collection, along with their translations. Defaults to 180. |
 | `DB_PATH` | `scripts/collect.js`, `scripts/serve.js` | Filesystem path to the local SQLite database file. Defaults to `data/app.db`. |
 | `PORT` | `scripts/serve.js` | HTTP port for the web server. Defaults to `3000`. |
 
@@ -196,6 +197,13 @@ and GitHub's public search API works without one.
   (`api.github.com/search/repositories`). GitHub has no official "trending"
   endpoint, so this approximates it: repos tagged `artificial-intelligence`
   pushed in the last 7 days, sorted by stars.
+Feed entries older than 120 days are dropped at collection time: some feeds
+publish their whole archive, and an abandoned one keeps serving old posts as
+if they were current (`qwenlm.github.io/blog` still serves 44 entries whose
+newest is from September 2025). Stored items are pruned at 180 days
+(`RETENTION_DAYS`), so nothing that has aged out of every source lingers in
+the rankings — upsert alone never deletes.
+
 - **Feedless labs** (`src/adapters/labposts/index.js`): labs with no public
   feed (Anthropic, Meta AI, Mistral, xAI, DeepSeek, Moonshot, Z.ai, MiniMax,
   AI2) discovered by domain through HN's search index, which yields their own

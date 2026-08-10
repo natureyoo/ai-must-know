@@ -198,3 +198,22 @@ test('fetchGithubItems skips a malformed repo entry but keeps the rest of the ba
   assert.equal(items.length, 1);
   assert.equal(items[0].id, 'github-2');
 });
+
+test('an abandoned feed contributes nothing rather than year-old posts', async () => {
+  const { fetchRssItems } = await import('../src/adapters/rss/index.js');
+  const entry = (title, date) => `<item><title>${title}</title><link>https://qwenlm.github.io/${encodeURIComponent(title)}</link><pubDate>${date}</pubDate><description>d</description></item>`;
+  const xml = `<rss><channel>
+    ${entry('Qwen3Guard', 'Mon, 22 Sep 2025 00:00:00 GMT')}
+    ${entry('Qwen-Image', 'Mon, 04 Aug 2025 00:00:00 GMT')}
+    ${entry('Something recent', 'Fri, 07 Aug 2026 00:00:00 GMT')}
+  </channel></rss>`;
+
+  const items = await fetchRssItems({
+    fetchImpl: async () => ({ ok: true, text: async () => xml }),
+    feeds: [{ url: 'https://qwenlm.github.io/blog/index.xml', source: 'Qwen', publisherType: 'company', category: 'models' }],
+    now: new Date('2026-08-10T00:00:00.000Z'),
+    maxAgeDays: 120,
+  });
+
+  assert.deepEqual(items.map((i) => i.title), ['Something recent']);
+});
