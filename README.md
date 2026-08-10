@@ -90,9 +90,26 @@ four fields per item in the `translations` table:
 - `takeKo` — 2-3 sentences of **AI commentary**: why this matters, what to
   watch, what to be skeptical of. This is the only generated field allowed to
   interpret rather than report; the prompt forbids inventing figures or
-  events and requires uncertainty to be marked as such. It is what the card's
+  events, requires the take to be anchored in something the article actually
+  says, and requires uncertainty to be marked as such. It is what the card's
   `AI 관점 · 왜 중요한가` toggle opens onto, and it always carries a visible
   notice that it was written by AI.
+
+The take is written from the **original article**, not from the feed teaser.
+`src/enrich/article.js` fetches each pending item's URL and reduces the page
+to plain text (chrome, scripts and nav stripped, `<article>`/`<main>`
+preferred, capped at 4k characters), with bounded concurrency and a short
+timeout. Only items that still need translating are fetched, so the daily run
+pulls the handful of genuinely new articles. A paywall, a JS-only shell, a
+non-HTML target or a timeout yields nothing and the take falls back to being
+written from the summary — collection never fails because a publisher's site
+is slow.
+
+`OPENAI_MODEL` defaults to `gpt-4o`: with only a one-line summary to work
+from, `gpt-4o-mini` produced generic filler ("성능 향상을 포함할 수 있습니다").
+If the configured model id is rejected, the run retries once on
+`gpt-4o-mini` and logs the switch rather than turning the whole site
+English.
 
 A closed card is therefore: verification badge, category, platforms, the
 headline, `발행 <date> · <N일 전>` (the story's earliest publication across
@@ -137,8 +154,9 @@ company-claim rules), the live-adapter fixture fallback path, the
 translation cache (no key, unchanged items, edited items, API failure,
 malformed response, migrating a DB written before `takeKo` existed), the
 Hugging Face adapter (org attribution, age/traction floors, unreachable
-Hub), and the Korean/English fallback, recency window, and as-of staleness
-logic the UI renders.
+Hub), article extraction (chrome stripping, paywall/JS-shell/non-HTML
+rejection, concurrency cap), the model fallback, and the Korean/English
+fallback, recency window, and as-of staleness logic the UI renders.
 
 ## Environment variables
 
@@ -148,7 +166,7 @@ See `.env.example`. All are optional — the app runs with none of them set.
 |---|---|---|
 | `GITHUB_TOKEN` | `src/adapters/github/index.js` | GitHub personal access token, sent as a `Bearer` header on the repo-search request to raise the public API's rate limit. Collection still works unauthenticated, just at GitHub's lower unauthenticated limit. |
 | `OPENAI_API_KEY` | `src/translate/index.js` | Used by `npm run collect` to render titles/summaries in Korean. Unset → the dashboard falls back to the English original per story. |
-| `OPENAI_MODEL` | `src/translate/index.js` | Model used for that translation. Defaults to `gpt-4o-mini`. |
+| `OPENAI_MODEL` | `src/translate/index.js` | Model used for translation and the AI take. Defaults to `gpt-4o`; falls back to `gpt-4o-mini` if the id is rejected. |
 | `DB_PATH` | `scripts/collect.js`, `scripts/serve.js` | Filesystem path to the local SQLite database file. Defaults to `data/app.db`. |
 | `PORT` | `scripts/serve.js` | HTTP port for the web server. Defaults to `3000`. |
 

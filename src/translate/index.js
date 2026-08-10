@@ -10,15 +10,24 @@
 
 import { createHash } from 'node:crypto';
 import { getTranslations, upsertTranslations } from '../db/index.js';
+import { fetchArticleTexts } from '../enrich/article.js';
 
 const ENDPOINT = 'https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL = 'gpt-4o-mini';
-const BATCH_SIZE = 12;
+// The take is the one field that has to reason rather than translate, and
+// gpt-4o-mini produced generic filler ("성능 향상을 포함할 수 있습니다") even with
+// the article body in hand. Overridable via OPENAI_MODEL.
+const DEFAULT_MODEL = 'gpt-4o';
+// Used only if the configured model is rejected — a typo'd or unavailable
+// model id would otherwise silently turn the whole site English.
+const FALLBACK_MODEL = 'gpt-4o-mini';
+// Smaller than before: each item now carries up to 4k characters of article
+// text, so a batch of twelve would be a large request for no benefit.
+const BATCH_SIZE = 6;
 
 // Bump when SYSTEM_PROMPT changes in a way that should regenerate existing
 // Korean text. The hash covers it, so a bump re-translates everything once
 // (and only once) instead of leaving old output frozen in the DB forever.
-const PROMPT_VERSION = 3;
+const PROMPT_VERSION = 4;
 
 export function contentHash(item) {
   return createHash('sha1').update(`v${PROMPT_VERSION}\n${item.title}\n${item.summary}`).digest('hex').slice(0, 16);
@@ -37,7 +46,12 @@ For each input item return:
   BAD: "WeatherNext AI 모델이 사이클론 예측에서 돌파구를 달성했습니다" (restates the headline)
   GOOD: "Google DeepMind이 사이클론 진로 예측에서 기존 수치예보보다 앞선 정확도를 냈다고 발표했습니다"
 - summaryKo: AT MOST 2 Korean sentences, 합니다체, adding the detail gistKo had no room for — figures, scope, availability, what it is compared against. Never restate gistKo. If the input has nothing further to add, return the single most useful remaining detail.
-- takeKo: 2-3 Korean sentences, 합니다체, YOUR reading of why this matters: what it changes for engineers or the industry, what to watch next, or what to be skeptical about. This is the only field where interpretation is allowed, and it must stay grounded — reason from what the input says, never invent benchmarks, dates, figures, or events. Mark anything uncertain as uncertain ("~일 수 있습니다", "아직 확인되지 않았습니다"). If the item is a routine release with no wider significance, say so plainly rather than inflating it. No hype, no "주목됩니다" filler.
+- takeKo: 2-3 Korean sentences, 합니다체, YOUR reading of why this matters, written from "articleText" — the body of the original piece. Say what it changes for engineers or the industry, what to watch next, or what to be skeptical about, and anchor it in something specific the article actually says (a figure, a design decision, a caveat the authors admit, what it is compared against). This is the only field where interpretation is allowed, and it must stay grounded: never invent benchmarks, dates, figures, or events. Mark anything uncertain as uncertain ("~일 수 있습니다", "아직 확인되지 않았습니다"). If it is a routine release with no wider significance, say so plainly rather than inflating it.
+  BAD: "성능 향상 및 새로운 기능을 포함할 수 있습니다. 엔지니어들은 영향을 평가해야 합니다." (says nothing the headline did not)
+  BAD: "향후 발전이 주목됩니다." (filler)
+  GOOD: "장문 컨텍스트 벤치마크만 공개하고 코드 생성 결과는 빠져 있어, 실제 코딩 작업 성능은 아직 판단하기 이릅니다. 가중치가 공개돼 자체 검증은 가능합니다."
+
+Each item includes "articleText": the original page reduced to plain text. It may be empty (paywall, JS-only page, fetch failure) — in that case write takeKo from the title and summary alone and keep it correspondingly modest. When it is present it is the best evidence you have; prefer it over the summary, but never contradict the title/summary.
 
 Every field except takeKo is reporting: never add facts, figures, or judgements absent from the input.
 
@@ -53,8 +67,17 @@ function validRow(entry, allowedIds) {
   );
 }
 
-async function translateBatch(batch, { apiKey, model, fetchImpl }) {
-  const payload = batch.map((i) => ({ id: i.id, title: i.title, summary: i.summary }));
+function isModelError(message) {
+  return /model|404|invalid_request/i.test(message);
+}
+
+async function translateBatch(batch, { apiKey, model, fetchImpl, articleText }) {
+  const payload = batch.map((i) => ({
+    id: i.id,
+    title: i.title,
+    summary: i.summary,
+    articleText: articleText.get(i.id) ?? '',
+  }));
   const res = await fetchImpl(ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -102,6 +125,7 @@ export async function translateItems(
     fetchImpl = fetch,
     log = console.log,
     batchSize = BATCH_SIZE,
+    getArticleTexts = fetchArticleTexts,
   } = {},
 ) {
   const existing = getTranslations(db);
@@ -116,20 +140,42 @@ export async function translateItems(
     return 0;
   }
 
+  // Only the pending items are fetched, so the daily run pulls the handful
+  // of genuinely new articles rather than re-reading the whole archive.
+  const articleText = await getArticleTexts(pending);
+  log(`Translation: fetched the original article text for ${articleText.size}/${pending.length} item(s); the rest fall back to their summary.`);
+
+  let activeModel = model;
   let translated = 0;
+
   for (let i = 0; i < pending.length; i += batchSize) {
     const batch = pending.slice(i, i + batchSize);
     try {
-      const rows = await translateBatch(batch, { apiKey, model, fetchImpl });
+      const rows = await translateBatch(batch, { apiKey, model: activeModel, fetchImpl, articleText });
       // Persist per batch, so a failure halfway through keeps what already
       // succeeded instead of re-billing it on the next run.
       upsertTranslations(db, rows);
       translated += rows.length;
     } catch (err) {
+      // A rejected model id fails every batch identically, so retry this one
+      // on the fallback and switch for the rest of the run rather than
+      // losing the entire day's Korean text to a typo in OPENAI_MODEL.
+      if (activeModel !== FALLBACK_MODEL && isModelError(err.message)) {
+        log(`Translation: model "${activeModel}" rejected (${err.message}) — falling back to ${FALLBACK_MODEL}.`);
+        activeModel = FALLBACK_MODEL;
+        try {
+          const rows = await translateBatch(batch, { apiKey, model: activeModel, fetchImpl, articleText });
+          upsertTranslations(db, rows);
+          translated += rows.length;
+          continue;
+        } catch (retryErr) {
+          err.message = retryErr.message;
+        }
+      }
       log(`Translation: batch of ${batch.length} failed (${err.message}) — those items stay English.`);
     }
   }
 
-  log(`Translation: ${translated}/${pending.length} new or changed item(s) rendered in Korean via ${model}.`);
+  log(`Translation: ${translated}/${pending.length} new or changed item(s) rendered in Korean via ${activeModel}.`);
   return translated;
 }
