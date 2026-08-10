@@ -26,11 +26,9 @@ const STRINGS = {
     homeTitleFiltered: (cat) => `${cat} — Must Know`,
     loading: '불러오는 중...',
     storyCount: (n, period) => `${n}개 스토리 · ${period} · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스)`,
-    recentOnly: '최근 7일',
-    allTime: '전체 기간',
-    periodRecent: '최근 7일 발행',
-    periodAll: '전체 기간',
-    emptyRecent: '최근 7일 안에 발행된 스토리가 없습니다. "전체 기간"으로 바꿔보세요.',
+    periodChip: (days) => (days ? `최근 ${days}일` : '전체 기간'),
+    periodNote: (days) => (days ? `최근 ${days}일 발행` : '전체 기간'),
+    emptyRecent: '이 기간에 발행된 스토리가 없습니다. 기간을 넓혀보세요.',
     empty: '이 필터에 해당하는 스토리가 없습니다.',
     loadFailed: (msg) => `데이터를 불러오지 못했습니다: ${msg}`,
     notFound: '해당 스토리를 찾을 수 없습니다.',
@@ -78,11 +76,9 @@ const STRINGS = {
     homeTitleFiltered: (cat) => `${cat} — Must Know`,
     loading: 'Loading...',
     storyCount: (n, period) => `${n} stories · ${period} · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus)`,
-    recentOnly: 'Last 7 days',
-    allTime: 'All time',
-    periodRecent: 'published in the last 7 days',
-    periodAll: 'all time',
-    emptyRecent: 'Nothing was published in the last 7 days. Try "All time".',
+    periodChip: (days) => (days ? `Last ${days} days` : 'All time'),
+    periodNote: (days) => (days ? `published in the last ${days} days` : 'all time'),
+    emptyRecent: 'Nothing was published in this window. Try a wider one.',
     empty: 'No stories match this filter.',
     loadFailed: (msg) => `Could not load data: ${msg}`,
     notFound: 'Story not found.',
@@ -131,11 +127,14 @@ const STRINGS = {
 // glance rather than needing a sort/filter round-trip per story.
 const TOP_N = 24;
 
-// recentOnly defaults on: the viral score keeps well-engaged older stories
-// near the top, which is right for ranking and wrong for a page titled
-// "오늘의 Must Know".
-const RECENT_DAYS = 7;
-const state = { category: '', recentOnly: true, lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
+// The window defaults to 7 days: the viral score keeps well-engaged older
+// stories near the top, which is right for ranking and wrong for a page
+// titled "오늘의 Must Know". 30 days is offered because a Hugging Face model
+// dates from when its repo was created, which is often weeks before it
+// trends — narrowing to 7 days hides most open-weight releases. Widening the
+// window is honest; back-dating them to "today" would not be.
+const PERIODS = [7, 30, 0];
+const state = { category: '', days: 7, lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
 
 const t = () => STRINGS[state.lang];
 
@@ -145,7 +144,7 @@ const cardGrid = document.getElementById('card-grid');
 const homeStatus = document.getElementById('home-status');
 const homeTitle = document.getElementById('home-title');
 const chipsContainer = document.getElementById('category-chips');
-const recencyToggle = document.getElementById('recency-toggle');
+const periodChips = document.getElementById('period-chips');
 const asOfEl = document.getElementById('data-asof');
 const footerNote = document.getElementById('footer-note');
 
@@ -294,16 +293,16 @@ async function renderHome() {
     const body = await fetchStories();
     state.dataAsOf = body.dataAsOf ?? state.dataAsOf;
     renderAsOf();
-    const inWindow = withinDays(body.stories, state.recentOnly ? RECENT_DAYS : 0);
+    const inWindow = withinDays(body.stories, state.days);
     const top = topStories(inWindow, TOP_N);
     homeTitle.textContent = state.category ? t().homeTitleFiltered(categoryLabel(state.category)) : t().homeTitle;
     if (top.length === 0) {
       homeStatus.textContent = '';
-      const message = state.recentOnly && body.stories.length > 0 ? t().emptyRecent : t().empty;
+      const message = state.days && body.stories.length > 0 ? t().emptyRecent : t().empty;
       cardGrid.innerHTML = `<div class="empty-box">${escapeHtml(message)}</div>`;
       return;
     }
-    homeStatus.textContent = t().storyCount(top.length, state.recentOnly ? t().periodRecent : t().periodAll);
+    homeStatus.textContent = t().storyCount(top.length, t().periodNote(state.days));
     cardGrid.innerHTML = top.map(renderCard).join('');
   } catch (err) {
     homeStatus.textContent = '';
@@ -432,7 +431,9 @@ function applyLanguage() {
   for (const chip of chipsContainer.querySelectorAll('.chip')) {
     chip.textContent = chip.dataset.category ? t().categories[chip.dataset.category] : t().all;
   }
-  recencyToggle.textContent = state.recentOnly ? t().recentOnly : t().allTime;
+  for (const chip of periodChips.querySelectorAll('.chip')) {
+    chip.textContent = t().periodChip(Number(chip.dataset.days));
+  }
 
   // Preserve whatever href the snapshot link already has — the static build
   // (scripts/build-static.js) rewrites it to point at the JSON snapshot.
@@ -440,6 +441,16 @@ function applyLanguage() {
   footerNote.innerHTML = `${escapeHtml(t().footerPre)}<a href="${escapeHtml(link.getAttribute('href'))}">${escapeHtml(link.textContent)}</a>${escapeHtml(t().footerPost)}`;
 
   renderAsOf();
+}
+
+function buildPeriodChips() {
+  for (const days of PERIODS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `chip${days === state.days ? ' active' : ''}`;
+    btn.dataset.days = String(days);
+    periodChips.appendChild(btn);
+  }
 }
 
 function buildCategoryChips() {
@@ -453,6 +464,7 @@ function buildCategoryChips() {
 }
 
 function initControls() {
+  buildPeriodChips();
   buildCategoryChips();
 
   chipsContainer.addEventListener('click', (e) => {
@@ -463,10 +475,11 @@ function initControls() {
     renderHome();
   });
 
-  recencyToggle.addEventListener('click', () => {
-    state.recentOnly = !state.recentOnly;
-    recencyToggle.classList.toggle('active', state.recentOnly);
-    recencyToggle.textContent = state.recentOnly ? t().recentOnly : t().allTime;
+  periodChips.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip');
+    if (!btn) return;
+    state.days = Number(btn.dataset.days);
+    for (const chip of periodChips.querySelectorAll('.chip')) chip.classList.toggle('active', chip === btn);
     renderHome();
   });
 

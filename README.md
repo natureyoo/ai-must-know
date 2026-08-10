@@ -100,11 +100,17 @@ its sources, so a later repost cannot make old news look new), the one-line
 gist, and the four scores. Everything else — the AI take, the verification
 reasoning, all five score rationales — sits behind toggles.
 
-The home view also has a **최근 7일** toggle, on by default. The viral score
-rewards accumulated engagement, so a two-week-old story can legitimately
-outrank today's; that is right for "what is big" and wrong for a page titled
-"오늘의 Must Know", so recency is a filter on top of the ranking rather than a
-change to it. Turning it off restores the full history.
+The home view also has a **최근 7일 / 최근 30일 / 전체 기간** window, defaulting
+to 7 days. The viral score rewards accumulated engagement, so a two-week-old
+story can legitimately outrank today's; that is right for "what is big" and
+wrong for a page titled "오늘의 Must Know", so recency is a filter on top of
+the ranking rather than a change to it.
+
+30 days exists because a Hugging Face model's publication date is when its
+repo was created, which is routinely weeks before it trends — a 7-day window
+hides most open-weight releases. Widening the window is honest; back-dating
+those items to "today" would not be, and every card shows its real 발행 date
+either way.
 
 Work is keyed on a SHA-1 of `title + summary`, so a daily re-collect only
 pays for genuinely new or edited items. Everything the app generates itself
@@ -288,7 +294,9 @@ are not the same axis:
 - **Hugging Face trending is a popularity signal, not an editorial one**: a
   quantised re-upload of last week's hit model can trend above a genuinely
   new release. The known-org allowlist and a much higher like floor for
-  everyone else filter most of that, but not all.
+  everyone else filter most of that, but not all. Its `createdAt` is also
+  repo-creation time, not "when this became news", which is why the recency
+  window offers 30 days.
 - **Korean text is machine translation, not editorial rewriting**
   (`src/translate/index.js`): the model is instructed to translate only and
   add nothing, but a mistranslated headline is possible. The original is
