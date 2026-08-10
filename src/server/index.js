@@ -99,11 +99,21 @@ export function buildStoryView(story, scored, translations = new Map()) {
 export function getStoryViews(db, { now = new Date(), includeFixtures = process.env.FIXTURES === 'include' } = {}) {
   const all = getAllSourceItems(db);
   const live = all.filter((i) => !FIXTURE_IDS.has(i.id));
-  const items = includeFixtures || live.length === 0 ? all : live;
+  const selected = includeFixtures || live.length === 0 ? all : live;
+  const translations = getTranslations(db);
+  // The adapters' keyword classifier is a poor one — a story merely
+  // mentioning GitHub became open-source news, an RL "policy" became policy
+  // news. Where src/translate has read the article and picked a category,
+  // that wins. Applied here, before scoring, so the impact weight and the
+  // category filter both see the same value. Re-collection overwrites the
+  // adapter's column but never the translation, so this survives.
+  const items = selected.map((i) => {
+    const category = translations.get(i.id)?.category;
+    return category ? { ...i, category } : i;
+  });
   const stories = buildStories(items);
   const scored = scoreStories(stories, { now });
   const scoredById = new Map(scored.map((s) => [s.storyId, s]));
-  const translations = getTranslations(db);
   return stories.map((story) => buildStoryView(story, scoredById.get(story.id), translations));
 }
 

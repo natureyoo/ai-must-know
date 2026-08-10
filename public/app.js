@@ -10,7 +10,7 @@
 
 import { topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale } from './logic.js';
 
-const CATEGORIES = ['research', 'models', 'products', 'open-source', 'policy', 'funding', 'safety'];
+const CATEGORIES = ['models', 'research', 'products', 'open-source', 'infrastructure', 'business', 'policy', 'funding', 'safety'];
 const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', hf: 'Hugging Face', fixture: 'Fixture' };
 
 // One ranking, spelled out. The API still accepts ?sort=viral|credibility|
@@ -22,11 +22,12 @@ const SORT = 'mustknow';
 const STRINGS = {
   ko: {
     all: '전체',
-    homeTitle: '오늘의 Must Know',
-    homeTitleFiltered: (cat) => `${cat} — Must Know`,
+    homeTitle: (period) => `${period} Must Know`,
+    homeTitleFiltered: (cat, period) => `${cat} · ${period} Must Know`,
     loading: '불러오는 중...',
     storyCount: (n, period) => `${n}개 스토리 · ${period} · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스)`,
     periodChip: (days) => (days ? `최근 ${days}일` : '전체 기간'),
+    periodTitle: (days) => (days ? `최근 ${days}일` : '전체 기간'),
     periodNote: (days) => (days ? `최근 ${days}일 발행` : '전체 기간'),
     emptyRecent: '이 기간에 발행된 스토리가 없습니다. 기간을 넓혀보세요.',
     empty: '이 필터에 해당하는 스토리가 없습니다.',
@@ -65,18 +66,21 @@ const STRINGS = {
       models: '모델',
       products: '제품',
       'open-source': '오픈소스',
-      policy: '정책',
+      infrastructure: '인프라',
+      business: '산업',
+      policy: '정책·규제',
       funding: '투자',
       safety: '안전',
     },
   },
   en: {
     all: 'All',
-    homeTitle: "Today's Must Know",
-    homeTitleFiltered: (cat) => `${cat} — Must Know`,
+    homeTitle: (period) => `Must Know · ${period}`,
+    homeTitleFiltered: (cat, period) => `${cat} · Must Know · ${period}`,
     loading: 'Loading...',
     storyCount: (n, period) => `${n} stories · ${period} · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus)`,
     periodChip: (days) => (days ? `Last ${days} days` : 'All time'),
+    periodTitle: (days) => (days ? `last ${days} days` : 'all time'),
     periodNote: (days) => (days ? `published in the last ${days} days` : 'all time'),
     emptyRecent: 'Nothing was published in this window. Try a wider one.',
     empty: 'No stories match this filter.',
@@ -115,7 +119,9 @@ const STRINGS = {
       models: 'Models',
       products: 'Products',
       'open-source': 'Open Source',
-      policy: 'Policy',
+      infrastructure: 'Infrastructure',
+      business: 'Business',
+      policy: 'Policy & Law',
       funding: 'Funding',
       safety: 'Safety',
     },
@@ -127,14 +133,14 @@ const STRINGS = {
 // glance rather than needing a sort/filter round-trip per story.
 const TOP_N = 24;
 
-// The window defaults to 7 days: the viral score keeps well-engaged older
-// stories near the top, which is right for ranking and wrong for a page
-// titled "오늘의 Must Know". 30 days is offered because a Hugging Face model
-// dates from when its repo was created, which is often weeks before it
-// trends — narrowing to 7 days hides most open-weight releases. Widening the
-// window is honest; back-dating them to "today" would not be.
+// 30 days by default. 7 was a cliff that kept hiding exactly what someone
+// went looking for — Qwen3.8-Max scored 87 and fell out at 7.04 days old —
+// and a Hugging Face model dates from when its repo was created, weeks
+// before it trends. Nothing is hidden silently: the heading names the
+// window and every card carries its own 발행 date. Back-dating old items so
+// they look current would be the dishonest fix.
 const PERIODS = [7, 30, 0];
-const state = { category: '', days: 7, lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
+const state = { category: '', days: 30, lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
 
 const t = () => STRINGS[state.lang];
 
@@ -295,7 +301,8 @@ async function renderHome() {
     renderAsOf();
     const inWindow = withinDays(body.stories, state.days);
     const top = topStories(inWindow, TOP_N);
-    homeTitle.textContent = state.category ? t().homeTitleFiltered(categoryLabel(state.category)) : t().homeTitle;
+    const period = t().periodTitle(state.days);
+    homeTitle.textContent = state.category ? t().homeTitleFiltered(categoryLabel(state.category), period) : t().homeTitle(period);
     if (top.length === 0) {
       homeStatus.textContent = '';
       const message = state.days && body.stories.length > 0 ? t().emptyRecent : t().empty;

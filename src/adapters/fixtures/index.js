@@ -293,6 +293,36 @@ const FIXTURE_TEMPLATES = [
     collectedDelayHours: 5,
     reactions: { points: 512, comments: 288 },
   },
+  // Offline coverage for the two categories added after the original seven,
+  // so the fixture set still exercises every filter chip with no network.
+  {
+    id: 'rss-nvidia-rubin-datacenter',
+    sourceType: 'rss',
+    source: 'NVIDIA Newsroom',
+    publisherType: 'company',
+    category: 'infrastructure',
+    title: 'NVIDIA Ships Rubin-Class Racks to First Datacenter Customers',
+    url: 'https://nvidianews.nvidia.com/news/rubin-rack-shipping/',
+    summary:
+      'NVIDIA says the first Rubin-class racks have shipped, with the company quoting 1.7x inference throughput per watt over the previous generation. Independent measurements are not yet available.',
+    hoursAgo: 14,
+    collectedDelayHours: 0.4,
+    reactions: { shares: 610, estimatedReads: 41000 },
+  },
+  {
+    id: 'rss-anthropic-api-price-cut',
+    sourceType: 'rss',
+    source: 'TechCrunch',
+    publisherType: 'independent-media',
+    category: 'business',
+    title: 'Anthropic Cuts Batch API Pricing by 40% as Inference Competition Intensifies',
+    url: 'https://techcrunch.com/2026/anthropic-batch-pricing/',
+    summary:
+      'Anthropic has cut batch API prices by 40%, the third price move among frontier vendors this quarter. Analysts read it as margin pressure from cheaper open-weight serving rather than a cost breakthrough.',
+    hoursAgo: 20,
+    collectedDelayHours: 0.5,
+    reactions: { shares: 480, estimatedReads: 33000 },
+  },
 ];
 
 function buildItem(template, now) {

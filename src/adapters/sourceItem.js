@@ -4,11 +4,18 @@
 
 export const SOURCE_TYPES = ['rss', 'hn', 'github', 'hf', 'fixture'];
 
+// The original seven left two recurring kinds of story with nowhere to go:
+// chips/datacenter/serving news kept landing in `products` or `models`, and
+// lawsuits, pricing changes and acquisitions kept landing in `policy` or
+// `funding`. Both are common enough in the collected data to need their own
+// bucket rather than distorting an existing one.
 export const CATEGORIES = [
   'research',
   'models',
   'products',
   'open-source',
+  'infrastructure',
+  'business',
   'policy',
   'funding',
   'safety',

@@ -30,6 +30,7 @@ const SCHEMA = `
     summaryKo    TEXT NOT NULL,
     gistKo       TEXT NOT NULL,
     takeKo       TEXT NOT NULL DEFAULT '',
+    category     TEXT NOT NULL DEFAULT '',
     translatedAt TEXT NOT NULL
   );
 `;
@@ -38,7 +39,10 @@ const SCHEMA = `
 // scheduled runs (actions/cache), so it predates them and CREATE TABLE IF NOT
 // EXISTS is a no-op there — without this, collect would crash on the older
 // file. Adding a column that already exists throws, hence the pragma check.
-const ADDED_COLUMNS = [{ table: 'translations', column: 'takeKo', spec: "TEXT NOT NULL DEFAULT ''" }];
+const ADDED_COLUMNS = [
+  { table: 'translations', column: 'takeKo', spec: "TEXT NOT NULL DEFAULT ''" },
+  { table: 'translations', column: 'category', spec: "TEXT NOT NULL DEFAULT ''" },
+];
 
 function migrate(db) {
   for (const { table, column, spec } of ADDED_COLUMNS) {
@@ -131,17 +135,18 @@ export function latestCollectedAt(db) {
 // collect never re-pays for text that has not changed.
 export function upsertTranslations(db, rows) {
   const stmt = db.prepare(`
-    INSERT INTO translations (id, hash, titleKo, summaryKo, gistKo, takeKo, translatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO translations (id, hash, titleKo, summaryKo, gistKo, takeKo, category, translatedAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       hash = excluded.hash,
       titleKo = excluded.titleKo,
       summaryKo = excluded.summaryKo,
       gistKo = excluded.gistKo,
       takeKo = excluded.takeKo,
+      category = excluded.category,
       translatedAt = excluded.translatedAt
   `);
-  for (const r of rows) stmt.run(r.id, r.hash, r.titleKo, r.summaryKo, r.gistKo, r.takeKo ?? '', r.translatedAt);
+  for (const r of rows) stmt.run(r.id, r.hash, r.titleKo, r.summaryKo, r.gistKo, r.takeKo ?? '', r.category ?? '', r.translatedAt);
   return rows.length;
 }
 

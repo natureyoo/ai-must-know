@@ -26,8 +26,10 @@ const CATEGORY_IMPACT_WEIGHT = {
   research: 85,
   models: 80,
   policy: 80,
+  infrastructure: 70,
   funding: 65,
   'open-source': 60,
+  business: 60,
   products: 55,
 };
 
@@ -104,9 +106,11 @@ const CATEGORY_KO = {
   safety: '안전',
   research: '연구',
   models: '모델',
-  policy: '정책',
+  policy: '정책·규제',
+  infrastructure: '인프라',
   funding: '투자',
   'open-source': '오픈소스',
+  business: '산업',
   products: '제품',
 };
 

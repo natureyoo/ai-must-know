@@ -60,7 +60,7 @@ test('fixture ids are unique', () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test('all seven categories are represented', () => {
+test('every category is represented, so offline mode exercises each filter chip', () => {
   const items = getFixtureItems();
   const present = new Set(items.map((i) => i.category));
   for (const category of CATEGORIES) {

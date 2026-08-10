@@ -11,6 +11,7 @@
 import { createHash } from 'node:crypto';
 import { getTranslations, upsertTranslations } from '../db/index.js';
 import { fetchArticleTexts } from '../enrich/article.js';
+import { CATEGORIES } from '../adapters/sourceItem.js';
 
 const ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 // The take is the one field that has to reason rather than translate, and
@@ -27,7 +28,7 @@ const BATCH_SIZE = 6;
 // Bump when SYSTEM_PROMPT changes in a way that should regenerate existing
 // Korean text. The hash covers it, so a bump re-translates everything once
 // (and only once) instead of leaving old output frozen in the DB forever.
-const PROMPT_VERSION = 4;
+const PROMPT_VERSION = 5;
 
 export function contentHash(item) {
   return createHash('sha1').update(`v${PROMPT_VERSION}\n${item.title}\n${item.summary}`).digest('hex').slice(0, 16);
@@ -51,11 +52,23 @@ For each input item return:
   BAD: "향후 발전이 주목됩니다." (filler)
   GOOD: "장문 컨텍스트 벤치마크만 공개하고 코드 생성 결과는 빠져 있어, 실제 코딩 작업 성능은 아직 판단하기 이릅니다. 가중치가 공개돼 자체 검증은 가능합니다."
 
+- category: EXACTLY ONE of research | models | products | open-source | infrastructure | business | policy | funding | safety. Work down this list and take the FIRST that fits, so an item that touches several lands in one place consistently:
+  1. safety — model risk, misuse, alignment, jailbreaks, red-teaming, a security incident or breach, safety evaluations
+  2. policy — regulation, legislation, standards, court rulings, lawsuits, government action
+  3. funding — a funding round, acquisition, or valuation
+  4. business — pricing, strategy, partnerships, hiring, earnings, market moves that are none of the above
+  5. infrastructure — chips, accelerators, datacenters, serving/inference stacks, hardware
+  6. models — a model being released, updated, or open-weighted (the model itself is the news)
+  7. research — a paper, experiment, benchmark result, or new method
+  8. open-source — an open-source tool, framework, or library (open model WEIGHTS are "models", not this)
+  9. products — an end-user product, feature, or app
+  A reinforcement-learning "policy" is research, not policy. A repository being on GitHub does not make it open-source news.
+
 Each item includes "articleText": the original page reduced to plain text. It may be empty (paywall, JS-only page, fetch failure) — in that case write takeKo from the title and summary alone and keep it correspondingly modest. When it is present it is the best evidence you have; prefer it over the summary, but never contradict the title/summary.
 
 Every field except takeKo is reporting: never add facts, figures, or judgements absent from the input.
 
-Respond with JSON: {"items":[{"id":"<the id given>","titleKo":"...","gistKo":"...","summaryKo":"...","takeKo":"..."}]} — one entry per input item, ids copied exactly.`;
+Respond with JSON: {"items":[{"id":"<the id given>","titleKo":"...","gistKo":"...","summaryKo":"...","takeKo":"...","category":"..."}]} — one entry per input item, ids copied exactly.`;
 
 const FIELDS = ['titleKo', 'gistKo', 'summaryKo', 'takeKo'];
 
@@ -65,6 +78,13 @@ function validRow(entry, allowedIds) {
     allowedIds.has(entry.id) &&
     FIELDS.every((k) => typeof entry[k] === 'string' && entry[k].trim() !== '')
   );
+}
+
+// An unrecognised category is dropped rather than stored: the keyword
+// fallback in the adapters is a worse classifier but a known one, and a
+// junk value would break filtering and the impact weight.
+function validCategory(value) {
+  return typeof value === 'string' && CATEGORIES.includes(value) ? value : '';
 }
 
 function isModelError(message) {
@@ -108,6 +128,7 @@ async function translateBatch(batch, { apiKey, model, fetchImpl, articleText }) 
       summaryKo: entry.summaryKo.trim(),
       gistKo: entry.gistKo.trim(),
       takeKo: entry.takeKo.trim(),
+      category: validCategory(entry.category),
       translatedAt,
     }));
 }
