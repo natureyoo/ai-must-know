@@ -1,7 +1,8 @@
 # AI Must Know
 
 Local AI news curation dashboard. Collects AI news from official RSS/feeds,
-Hacker News, and GitHub, merges duplicate coverage into stories, and scores
+Hacker News, GitHub, and the Hugging Face Hub, merges duplicate coverage into
+stories, and scores
 each story on virality, publisher influence, credibility, and industry
 impact — with a visible verification status for every claim.
 
@@ -24,7 +25,8 @@ npm run collect   # fetch/refresh data into the local SQLite DB, then exit
 npm run serve     # start the web server, reading from that DB
 ```
 
-`npm run collect` runs the RSS, Hacker News, and GitHub adapters live. Each
+`npm run collect` runs the RSS, Hacker News, GitHub, and Hugging Face
+adapters live. Each
 source is independent: if a source's live fetch fails or returns nothing
 (no network, feed down, API error), that source alone falls back to its
 bundled fixture items — the other sources still use live data. This means
@@ -75,20 +77,34 @@ and the choice is remembered in `localStorage`.
 
 Sources publish in English, so `src/translate/index.js` renders each
 collected item into Korean during collection via the OpenAI API, storing
-three fields per item in the `translations` table:
+four fields per item in the `translations` table:
 
 - `titleKo` — the headline in Korean (product/model names left intact),
-- `gistKo` — a **one-sentence, ≤40-character** summary of what actually
-  happened; this is the line the card is built around, so the grid can be
-  read without opening anything,
+- `gistKo` — **one sentence, 45-90 characters**, carrying the actual news:
+  the actor, the thing, and every concrete figure, model name or benchmark in
+  the source. This is the line the card is built around, so the grid can be
+  read without opening anything; the prompt rejects both vague ("새로운 결과를
+  발표했습니다") and headline-restating output,
 - `summaryKo` — the original's content compressed to **at most 2 sentences**,
-  shown only when the reader opens the card's `원문 요약` toggle.
+  adding what the gist had no room for (shown on the detail view),
+- `takeKo` — 2-3 sentences of **AI commentary**: why this matters, what to
+  watch, what to be skeptical of. This is the only generated field allowed to
+  interpret rather than report; the prompt forbids inventing figures or
+  events and requires uncertainty to be marked as such. It is what the card's
+  `AI 관점 · 왜 중요한가` toggle opens onto, and it always carries a visible
+  notice that it was written by AI.
 
 A closed card is therefore: verification badge, category, platforms, the
 headline, `발행 <date> · <N일 전>` (the story's earliest publication across
 its sources, so a later repost cannot make old news look new), the one-line
-gist, and the four scores. Everything else — the original's summary, the
-verification reasoning, all five score rationales — sits behind toggles.
+gist, and the four scores. Everything else — the AI take, the verification
+reasoning, all five score rationales — sits behind toggles.
+
+The home view also has a **최근 7일** toggle, on by default. The viral score
+rewards accumulated engagement, so a two-week-old story can legitimately
+outrank today's; that is right for "what is big" and wrong for a page titled
+"오늘의 Must Know", so recency is a filter on top of the ranking rather than a
+change to it. Turning it off restores the full history.
 
 Work is keyed on a SHA-1 of `title + summary`, so a daily re-collect only
 pays for genuinely new or edited items. Everything the app generates itself
@@ -113,7 +129,9 @@ Runs the full suite via the built-in `node --test` runner. Covers dedup
 score, the five verification states (including the independent-source and
 company-claim rules), the live-adapter fixture fallback path, the
 translation cache (no key, unchanged items, edited items, API failure,
-malformed response), and the Korean/English fallback + as-of staleness
+malformed response, migrating a DB written before `takeKo` existed), the
+Hugging Face adapter (org attribution, age/traction floors, unreachable
+Hub), and the Korean/English fallback, recency window, and as-of staleness
 logic the UI renders.
 
 ## Environment variables
@@ -133,9 +151,20 @@ and GitHub's public search API works without one.
 
 ## Data sources
 
-- **Official RSS/Atom feeds** (`src/adapters/rss/index.js`): OpenAI News,
-  Google DeepMind Blog, and Hugging Face Blog — first-party feeds, not
-  aggregators. Hand-rolled regex XML parsing (no dependency).
+- **Official RSS/Atom feeds** (`src/adapters/rss/index.js`): first-party lab
+  and research feeds (OpenAI, Google DeepMind, Google AI, Google Research,
+  Hugging Face, **Qwen/Alibaba**, Microsoft Research, Berkeley BAIR, GitHub
+  AI/ML) plus independent media (TechCrunch, The Verge, VentureBeat, MIT
+  Tech Review, Ars Technica, **MarkTechPost** — which covers open-weight
+  Chinese releases far more closely than the US tech press). Hand-rolled
+  regex XML parsing (no dependency).
+- **Hugging Face trending models** (`src/adapters/huggingface/index.js`):
+  the public Hub API, no key. This is what actually carries open-weight
+  releases — Kimi, Qwen, DeepSeek, MiniMax, GLM, Llama — because those labs
+  often ship the model first and blog about it later or never in English.
+  Uploads under a known org namespace (`moonshotai/`, `deepseek-ai/`,
+  `Qwen/`, …) count as that lab publishing its own release; anything else is
+  a community re-upload and needs far more traction to qualify as news.
 - **Hacker News** (`src/adapters/hackernews/index.js`): the official
   Firebase API (`hacker-news.firebaseio.com`), no key needed. Pulls current
   top stories and keeps ones matching an AI-related keyword filter.
@@ -143,6 +172,10 @@ and GitHub's public search API works without one.
   (`api.github.com/search/repositories`). GitHub has no official "trending"
   endpoint, so this approximates it: repos tagged `artificial-intelligence`
   pushed in the last 7 days, sorted by stars.
+- **Feedless labs** (`src/adapters/labposts/index.js`): labs with no public
+  feed (Anthropic, Meta AI, Mistral, xAI, DeepSeek, Moonshot, Z.ai, MiniMax,
+  AI2) discovered by domain through HN's search index, which yields their own
+  posts with canonical URLs.
 - **Fixtures** (`src/adapters/fixtures/index.js`): 19 hand-written, realistic
   items covering all 7 categories, with deliberately engineered same-URL
   duplicates, similar-title duplicates, cross-platform overlaps, a disputed
@@ -247,6 +280,15 @@ are not the same axis:
   Know and prints the weights behind it under the title. `/api/stories`
   still accepts `?sort=viral|credibility|impact|recent`, so restoring a
   sort control is a frontend-only change.
+- **`takeKo` is opinion, and is labelled as such**: it is a language model
+  reasoning from one summary, not analysis grounded in reporting. The prompt
+  bars it from inventing facts and requires hedging, but it can still be
+  wrong or shallow — it sits behind a toggle, under a notice, next to the
+  원문 link, and no score is derived from it.
+- **Hugging Face trending is a popularity signal, not an editorial one**: a
+  quantised re-upload of last week's hit model can trend above a genuinely
+  new release. The known-org allowlist and a much higher like floor for
+  everyone else filter most of that, but not all.
 - **Korean text is machine translation, not editorial rewriting**
   (`src/translate/index.js`): the model is instructed to translate only and
   add nothing, but a mistranslated headline is possible. The original is

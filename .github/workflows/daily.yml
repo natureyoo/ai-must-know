@@ -47,8 +47,12 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/app.db
-          key: aimustknow-db-${{ github.run_id }}
-          restore-keys: aimustknow-db-
+          # The suffix is a manual generation marker: bump it when an adapter
+          # change makes previously stored items wrong (e.g. a title format
+          # that dedup mis-merges). Upsert never deletes, so a bad row would
+          # otherwise live in the cached DB forever.
+          key: aimustknow-db-v2-${{ github.run_id }}
+          restore-keys: aimustknow-db-v2-
 
       - name: Collect and translate
         env:

@@ -25,6 +25,14 @@ export const FEEDLESS_LABS = [
   { domain: 'ai.meta.com', source: 'Meta AI', publisherType: 'company' },
   { domain: 'mistral.ai', source: 'Mistral AI', publisherType: 'company' },
   { domain: 'x.ai', source: 'xAI', publisherType: 'company' },
+  // Open-weight labs whose announcements land as a docs page or a model card
+  // rather than a feed. A domain with no recent HN submissions simply yields
+  // nothing, so listing one that goes quiet costs nothing.
+  { domain: 'deepseek.com', source: 'DeepSeek', publisherType: 'company' },
+  { domain: 'moonshot.ai', source: 'Moonshot AI (Kimi)', publisherType: 'company' },
+  { domain: 'z.ai', source: 'Z.ai (GLM)', publisherType: 'company' },
+  { domain: 'minimax.io', source: 'MiniMax', publisherType: 'company' },
+  { domain: 'allenai.org', source: 'Allen Institute for AI', publisherType: 'research-org' },
 ];
 
 function idFor(url) {

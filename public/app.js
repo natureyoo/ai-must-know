@@ -8,10 +8,10 @@
 // below. Every localized read goes through logic.js's `localized()`, which
 // falls back to the English original when a translation is missing.
 
-import { topStories, localized, localizedRationale, cardLead, cardBrief, relativeAge, isStale } from './logic.js';
+import { topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale } from './logic.js';
 
 const CATEGORIES = ['research', 'models', 'products', 'open-source', 'policy', 'funding', 'safety'];
-const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', fixture: 'Fixture' };
+const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', hf: 'Hugging Face', fixture: 'Fixture' };
 
 // One ranking, spelled out. The API still accepts ?sort=viral|credibility|
 // impact|recent (src/server), but four opaque sort options on screen raised
@@ -25,7 +25,12 @@ const STRINGS = {
     homeTitle: '오늘의 Must Know',
     homeTitleFiltered: (cat) => `${cat} — Must Know`,
     loading: '불러오는 중...',
-    storyCount: (n) => `${n}개 스토리 · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스)`,
+    storyCount: (n, period) => `${n}개 스토리 · ${period} · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스)`,
+    recentOnly: '최근 7일',
+    allTime: '전체 기간',
+    periodRecent: '최근 7일 발행',
+    periodAll: '전체 기간',
+    emptyRecent: '최근 7일 안에 발행된 스토리가 없습니다. "전체 기간"으로 바꿔보세요.',
     empty: '이 필터에 해당하는 스토리가 없습니다.',
     loadFailed: (msg) => `데이터를 불러오지 못했습니다: ${msg}`,
     notFound: '해당 스토리를 찾을 수 없습니다.',
@@ -36,6 +41,8 @@ const STRINGS = {
     source: '원문',
     evidence: '근거',
     briefToggle: '원문 요약',
+    takeToggle: 'AI 관점 · 왜 중요한가',
+    takeDisclaimer: '이 항목은 원문을 바탕으로 AI가 작성한 해석입니다. 사실 확인은 원문·근거 링크를 확인하세요.',
     published: (date, ago) => `발행 ${date} · ${ago}`,
     whyScore: '점수 산출 근거 보기',
     whyVerification: '검증 판단 이유',
@@ -70,7 +77,12 @@ const STRINGS = {
     homeTitle: "Today's Must Know",
     homeTitleFiltered: (cat) => `${cat} — Must Know`,
     loading: 'Loading...',
-    storyCount: (n) => `${n} stories · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus)`,
+    storyCount: (n, period) => `${n} stories · ${period} · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus)`,
+    recentOnly: 'Last 7 days',
+    allTime: 'All time',
+    periodRecent: 'published in the last 7 days',
+    periodAll: 'all time',
+    emptyRecent: 'Nothing was published in the last 7 days. Try "All time".',
     empty: 'No stories match this filter.',
     loadFailed: (msg) => `Could not load data: ${msg}`,
     notFound: 'Story not found.',
@@ -81,6 +93,8 @@ const STRINGS = {
     source: 'Original',
     evidence: 'Evidence',
     briefToggle: 'Summary',
+    takeToggle: 'AI take · why it matters',
+    takeDisclaimer: 'Written by AI from the original. Check the source and evidence links before relying on it.',
     published: (date, ago) => `Published ${date} · ${ago}`,
     whyScore: 'Why these scores?',
     whyVerification: 'Why this verification status?',
@@ -117,7 +131,11 @@ const STRINGS = {
 // glance rather than needing a sort/filter round-trip per story.
 const TOP_N = 24;
 
-const state = { category: '', lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
+// recentOnly defaults on: the viral score keeps well-engaged older stories
+// near the top, which is right for ranking and wrong for a page titled
+// "오늘의 Must Know".
+const RECENT_DAYS = 7;
+const state = { category: '', recentOnly: true, lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
 
 const t = () => STRINGS[state.lang];
 
@@ -127,6 +145,7 @@ const cardGrid = document.getElementById('card-grid');
 const homeStatus = document.getElementById('home-status');
 const homeTitle = document.getElementById('home-title');
 const chipsContainer = document.getElementById('category-chips');
+const recencyToggle = document.getElementById('recency-toggle');
 const asOfEl = document.getElementById('data-asof');
 const footerNote = document.getElementById('footer-note');
 
@@ -197,6 +216,19 @@ function rationaleList(scores) {
     .join('');
 }
 
+// One toggle per card. It carries the AI take when there is one — that is
+// the only thing on the card the reader cannot get from the headline — and
+// falls back to the original's summary otherwise (English mode, or a story
+// collected before takes existed).
+function takeOrBrief(view, brief) {
+  const take = state.lang === 'ko' ? view.takeKo : null;
+  if (take) {
+    return `<details class="rationale card-take"><summary>${escapeHtml(t().takeToggle)}</summary><p>${escapeHtml(take)}</p><p class="take-note">${escapeHtml(t().takeDisclaimer)}</p></details>`;
+  }
+  if (!brief) return '';
+  return `<details class="rationale card-brief"><summary>${escapeHtml(t().briefToggle)}</summary><p>${escapeHtml(brief)}</p></details>`;
+}
+
 function renderCard(view) {
   const s = view.scores;
   const text = localized(view, state.lang);
@@ -226,7 +258,7 @@ function renderCard(view) {
       <h2 class="card-title"><a href="#/story/${encodeURIComponent(view.id)}">${escapeHtml(text.title)}</a></h2>
       <p class="card-date">${escapeHtml(publishedLine(view.firstPublishedAt))}</p>
       ${lead ? `<p class="card-gist">${escapeHtml(lead)}</p>` : ''}
-      ${brief ? `<details class="rationale card-brief"><summary>${escapeHtml(t().briefToggle)}</summary><p>${escapeHtml(brief)}</p></details>` : ''}
+      ${takeOrBrief(view, brief)}
       <div class="score-pills">${scorePills(s)}</div>
       <details class="rationale">
         <summary>${escapeHtml(t().whyVerification)}</summary>
@@ -262,14 +294,16 @@ async function renderHome() {
     const body = await fetchStories();
     state.dataAsOf = body.dataAsOf ?? state.dataAsOf;
     renderAsOf();
-    const top = topStories(body.stories, TOP_N);
+    const inWindow = withinDays(body.stories, state.recentOnly ? RECENT_DAYS : 0);
+    const top = topStories(inWindow, TOP_N);
     homeTitle.textContent = state.category ? t().homeTitleFiltered(categoryLabel(state.category)) : t().homeTitle;
     if (top.length === 0) {
       homeStatus.textContent = '';
-      cardGrid.innerHTML = `<div class="empty-box">${escapeHtml(t().empty)}</div>`;
+      const message = state.recentOnly && body.stories.length > 0 ? t().emptyRecent : t().empty;
+      cardGrid.innerHTML = `<div class="empty-box">${escapeHtml(message)}</div>`;
       return;
     }
-    homeStatus.textContent = t().storyCount(top.length);
+    homeStatus.textContent = t().storyCount(top.length, state.recentOnly ? t().periodRecent : t().periodAll);
     cardGrid.innerHTML = top.map(renderCard).join('');
   } catch (err) {
     homeStatus.textContent = '';
@@ -345,6 +379,13 @@ async function renderDetail(id) {
         </div>
       </div>
 
+      ${state.lang === 'ko' && view.takeKo ? `
+      <div class="panel panel-take">
+        <h2>${escapeHtml(t().takeToggle)}</h2>
+        <p>${escapeHtml(view.takeKo)}</p>
+        <p class="take-note">${escapeHtml(t().takeDisclaimer)}</p>
+      </div>` : ''}
+
       <div class="detail-scores">
         ${scoreCard('mustKnow', s.mustKnow)}
         ${scoreCard('viral', s.viral)}
@@ -391,6 +432,7 @@ function applyLanguage() {
   for (const chip of chipsContainer.querySelectorAll('.chip')) {
     chip.textContent = chip.dataset.category ? t().categories[chip.dataset.category] : t().all;
   }
+  recencyToggle.textContent = state.recentOnly ? t().recentOnly : t().allTime;
 
   // Preserve whatever href the snapshot link already has — the static build
   // (scripts/build-static.js) rewrites it to point at the JSON snapshot.
@@ -418,6 +460,13 @@ function initControls() {
     if (!btn) return;
     state.category = btn.dataset.category;
     for (const chip of chipsContainer.querySelectorAll('.chip')) chip.classList.toggle('active', chip === btn);
+    renderHome();
+  });
+
+  recencyToggle.addEventListener('click', () => {
+    state.recentOnly = !state.recentOnly;
+    recencyToggle.classList.toggle('active', state.recentOnly);
+    recencyToggle.textContent = state.recentOnly ? t().recentOnly : t().allTime;
     renderHome();
   });
 

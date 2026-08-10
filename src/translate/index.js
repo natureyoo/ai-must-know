@@ -18,31 +18,38 @@ const BATCH_SIZE = 12;
 // Bump when SYSTEM_PROMPT changes in a way that should regenerate existing
 // Korean text. The hash covers it, so a bump re-translates everything once
 // (and only once) instead of leaving old output frozen in the DB forever.
-const PROMPT_VERSION = 2;
+const PROMPT_VERSION = 3;
 
 export function contentHash(item) {
   return createHash('sha1').update(`v${PROMPT_VERSION}\n${item.title}\n${item.summary}`).digest('hex').slice(0, 16);
 }
 
-// gistKo is the card's lead line: the one sentence that tells a reader what
-// happened without opening anything. Explicitly bounded, because an LLM left
-// unbounded writes a paragraph and the card stops being scannable.
-const SYSTEM_PROMPT = `You translate AI-industry news for a Korean-speaking engineering audience.
+// Three tiers, deliberately doing three different jobs — an earlier version
+// had gistKo and summaryKo both paraphrasing the same sentence, so opening a
+// card told the reader nothing new. gistKo states the fact, summaryKo adds
+// the specifics, takeKo is the only place any interpretation is allowed.
+const SYSTEM_PROMPT = `You brief a Korean-speaking engineering audience on AI-industry news.
 
 For each input item return:
-- titleKo: the headline in natural Korean. Keep product names, model names, company names, and version numbers in their original form (GPT-5.2, Claude, Hugging Face). Do not add words that are not in the original.
-- gistKo: ONE Korean sentence ending in 합니다/했습니다, 60 characters or fewer, saying what concretely happened. It MUST carry the specific detail — who, what thing, and any number, model name, version, or amount present in the input. "OpenAI가 새로운 결과를 발표했습니다" is a failure; "OpenAI가 수학 난제 10건에서 새 결과를 냈다고 발표했습니다" is correct. No marketing tone, no "~에 대한 소식", no trailing ellipsis. If the input genuinely contains no specifics, state the most concrete thing it does say rather than padding.
-- summaryKo: what the original says, compressed to AT MOST 2 Korean sentences, plain 합니다체. Keep the concrete specifics (numbers, model names, who did what) and drop framing, background, and repetition. This is read after gistKo, so it must add detail rather than restate it.
+- titleKo: the headline in natural Korean. Keep product names, model names, company names, and version numbers in their original form (GPT-5.2, Claude, Kimi-K3, Hugging Face). Do not add words that are not in the original.
+- gistKo: ONE Korean sentence ending in 합니다/했습니다, 45-90 characters, dense with the actual news. It must answer "무엇이 어떻게 달라졌는가" and carry every concrete specific present in the input — the actor, the thing, and any number, model name, version, benchmark, price, or amount. A reader who reads ONLY this line should be able to say what happened.
+  BAD: "OpenAI가 새로운 결과를 발표했습니다" (no specifics)
+  BAD: "WeatherNext AI 모델이 사이클론 예측에서 돌파구를 달성했습니다" (restates the headline)
+  GOOD: "Google DeepMind이 사이클론 진로 예측에서 기존 수치예보보다 앞선 정확도를 냈다고 발표했습니다"
+- summaryKo: AT MOST 2 Korean sentences, 합니다체, adding the detail gistKo had no room for — figures, scope, availability, what it is compared against. Never restate gistKo. If the input has nothing further to add, return the single most useful remaining detail.
+- takeKo: 2-3 Korean sentences, 합니다체, YOUR reading of why this matters: what it changes for engineers or the industry, what to watch next, or what to be skeptical about. This is the only field where interpretation is allowed, and it must stay grounded — reason from what the input says, never invent benchmarks, dates, figures, or events. Mark anything uncertain as uncertain ("~일 수 있습니다", "아직 확인되지 않았습니다"). If the item is a routine release with no wider significance, say so plainly rather than inflating it. No hype, no "주목됩니다" filler.
 
-Translate only. Never add facts, figures, or judgements that are absent from the input.
+Every field except takeKo is reporting: never add facts, figures, or judgements absent from the input.
 
-Respond with JSON: {"items":[{"id":"<the id given>","titleKo":"...","gistKo":"...","summaryKo":"..."}]} — one entry per input item, ids copied exactly.`;
+Respond with JSON: {"items":[{"id":"<the id given>","titleKo":"...","gistKo":"...","summaryKo":"...","takeKo":"..."}]} — one entry per input item, ids copied exactly.`;
+
+const FIELDS = ['titleKo', 'gistKo', 'summaryKo', 'takeKo'];
 
 function validRow(entry, allowedIds) {
   return (
     entry &&
     allowedIds.has(entry.id) &&
-    ['titleKo', 'gistKo', 'summaryKo'].every((k) => typeof entry[k] === 'string' && entry[k].trim() !== '')
+    FIELDS.every((k) => typeof entry[k] === 'string' && entry[k].trim() !== '')
   );
 }
 
@@ -77,6 +84,7 @@ async function translateBatch(batch, { apiKey, model, fetchImpl }) {
       titleKo: entry.titleKo.trim(),
       summaryKo: entry.summaryKo.trim(),
       gistKo: entry.gistKo.trim(),
+      takeKo: entry.takeKo.trim(),
       translatedAt,
     }));
 }

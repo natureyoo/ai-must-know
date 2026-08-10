@@ -273,9 +273,22 @@ select {
 details.rationale { font-size: 0.72rem; color: var(--text-muted); }
 details.rationale summary { cursor: pointer; color: var(--accent); }
 details.rationale p { margin: 4px 0 0; }
-/* The 원문 요약 toggle carries actual reading content, not a footnote, so it
-   keeps body-text size while the score/verification toggles stay small. */
-.card-brief p { font-size: 0.85rem; line-height: 1.55; color: var(--text-muted); }
+/* The 원문 요약 / AI 관점 toggles carry actual reading content, not a
+   footnote, so they keep body-text size while the score/verification toggles
+   stay small. */
+.card-brief p, .card-take p { font-size: 0.85rem; line-height: 1.55; color: var(--text-muted); }
+.card-take p:first-of-type { color: var(--text); }
+
+/* AI commentary is visually separated from reported fact — it is the one
+   place on the page that interprets rather than reports. */
+.panel-take { border-left: 3px solid var(--accent); }
+.panel-take p { margin: 0; line-height: 1.6; }
+.take-note {
+  margin-top: 8px !important;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
 
 .rationale-list { margin: 6px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 5px; }
 .rationale-list b { color: var(--text); }

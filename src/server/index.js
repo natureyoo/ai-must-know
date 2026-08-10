@@ -70,6 +70,9 @@ export function buildStoryView(story, scored, translations = new Map()) {
     summary: canonical.summary,
     summaryKo: bodyTr?.summaryKo ?? null,
     gistKo: bodyTr?.gistKo ?? null,
+    // AI commentary, not reporting — the UI labels it as such and it is the
+    // only generated field allowed to interpret rather than restate.
+    takeKo: bodyTr?.takeKo || null,
     category: storyCategory(items),
     platforms,
     firstPublishedAt: new Date(firstPublishedAt).toISOString(),

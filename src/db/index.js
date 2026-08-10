@@ -29,9 +29,23 @@ const SCHEMA = `
     titleKo      TEXT NOT NULL,
     summaryKo    TEXT NOT NULL,
     gistKo       TEXT NOT NULL,
+    takeKo       TEXT NOT NULL DEFAULT '',
     translatedAt TEXT NOT NULL
   );
 `;
+
+// Columns added after the first release. The deployed DB is carried between
+// scheduled runs (actions/cache), so it predates them and CREATE TABLE IF NOT
+// EXISTS is a no-op there — without this, collect would crash on the older
+// file. Adding a column that already exists throws, hence the pragma check.
+const ADDED_COLUMNS = [{ table: 'translations', column: 'takeKo', spec: "TEXT NOT NULL DEFAULT ''" }];
+
+function migrate(db) {
+  for (const { table, column, spec } of ADDED_COLUMNS) {
+    const existing = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!existing.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${spec}`);
+  }
+}
 
 // Opens (creating if needed) the sqlite file at `path` and ensures the
 // schema exists. Pass ':memory:' for an ephemeral DB (used by tests).
@@ -39,6 +53,7 @@ export function openDb(path) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 
@@ -104,16 +119,17 @@ export function latestCollectedAt(db) {
 // collect never re-pays for text that has not changed.
 export function upsertTranslations(db, rows) {
   const stmt = db.prepare(`
-    INSERT INTO translations (id, hash, titleKo, summaryKo, gistKo, translatedAt)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO translations (id, hash, titleKo, summaryKo, gistKo, takeKo, translatedAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       hash = excluded.hash,
       titleKo = excluded.titleKo,
       summaryKo = excluded.summaryKo,
       gistKo = excluded.gistKo,
+      takeKo = excluded.takeKo,
       translatedAt = excluded.translatedAt
   `);
-  for (const r of rows) stmt.run(r.id, r.hash, r.titleKo, r.summaryKo, r.gistKo, r.translatedAt);
+  for (const r of rows) stmt.run(r.id, r.hash, r.titleKo, r.summaryKo, r.gistKo, r.takeKo ?? '', r.translatedAt);
   return rows.length;
 }
 

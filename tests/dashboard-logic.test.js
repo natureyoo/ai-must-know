@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { firstSentences, topStories, localized, localizedRationale, cardLead, cardBrief, relativeAge, isStale } from '../public/logic.js';
+import { firstSentences, topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale } from '../public/logic.js';
 import { getFixtureItems } from '../src/adapters/fixtures/index.js';
 
 const VIEW = {
@@ -143,4 +143,22 @@ test('isStale flags a missed daily run but not a normal same-day-old snapshot', 
   assert.equal(isStale('2026-08-09T05:00:00.000Z', now), false, '7h old is a normal daily snapshot');
   assert.equal(isStale('2026-08-08T20:00:00.000Z', now), false, '16h old is still within one cycle');
   assert.equal(isStale('2026-08-08T04:00:00.000Z', now), true, '32h old means a run was missed');
+});
+
+test('the recency window keeps what broke inside it and drops what did not', () => {
+  const now = new Date('2026-08-10T00:00:00.000Z');
+  const stories = [
+    { id: 'today', firstPublishedAt: '2026-08-09T20:00:00.000Z' },
+    { id: 'six-days', firstPublishedAt: '2026-08-04T01:00:00.000Z' },
+    { id: 'twelve-days', firstPublishedAt: '2026-07-29T00:00:00.000Z' },
+  ];
+
+  assert.deepEqual(withinDays(stories, 7, now).map((s) => s.id), ['today', 'six-days']);
+  assert.deepEqual(withinDays(stories, 0, now).map((s) => s.id), ['today', 'six-days', 'twelve-days'], 'no window = no filtering');
+});
+
+test('the window uses when the story broke, not a later repost of it', () => {
+  const now = new Date('2026-08-10T00:00:00.000Z');
+  const revived = [{ id: 'old-story', firstPublishedAt: '2026-07-20T00:00:00.000Z', latestPublishedAt: '2026-08-09T00:00:00.000Z' }];
+  assert.deepEqual(withinDays(revived, 7, now), [], 'a fresh repost must not resurrect three-week-old news');
 });

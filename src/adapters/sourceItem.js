@@ -2,7 +2,7 @@
 // fixtures, and future ones like reddit/youtube/x) must return items shaped
 // like this so processing/scoring/verification can stay adapter-agnostic.
 
-export const SOURCE_TYPES = ['rss', 'hn', 'github', 'fixture'];
+export const SOURCE_TYPES = ['rss', 'hn', 'github', 'hf', 'fixture'];
 
 export const CATEGORIES = [
   'research',

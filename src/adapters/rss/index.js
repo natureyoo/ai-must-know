@@ -15,6 +15,18 @@ export const DEFAULT_FEEDS = [
   { url: 'https://openai.com/news/rss.xml', source: 'OpenAI News', publisherType: 'company', category: 'models' },
   { url: 'https://deepmind.google/blog/rss.xml', source: 'Google DeepMind Blog', publisherType: 'company', category: 'research' },
   { url: 'https://huggingface.co/blog/feed.xml', source: 'Hugging Face Blog', publisherType: 'company', category: 'open-source' },
+  // Non-US / open-weight labs. Without these the dashboard reads as if only
+  // OpenAI, Google and Anthropic ship anything — Qwen, DeepSeek, Kimi and
+  // MiniMax releases were reaching it only as secondhand coverage, if at all.
+  { url: 'https://qwenlm.github.io/blog/index.xml', source: 'Qwen (Alibaba)', publisherType: 'company', category: 'models' },
+  { url: 'https://blog.google/innovation-and-ai/technology/ai/rss/', source: 'Google AI Blog', publisherType: 'company', category: 'models' },
+  { url: 'https://research.google/blog/rss/', source: 'Google Research', publisherType: 'research-org', category: 'research' },
+  { url: 'https://www.microsoft.com/en-us/research/feed/', source: 'Microsoft Research', publisherType: 'research-org', category: 'research' },
+  { url: 'https://bair.berkeley.edu/blog/feed.xml', source: 'Berkeley BAIR', publisherType: 'research-org', category: 'research' },
+  { url: 'https://github.blog/ai-and-ml/feed/', source: 'GitHub Blog (AI/ML)', publisherType: 'company', category: 'open-source' },
+  // Covers open-weight releases (Qwen/DeepSeek/Kimi/GLM) far more closely
+  // than the US tech press does.
+  { url: 'https://www.marktechpost.com/feed/', source: 'MarkTechPost', publisherType: 'independent-media', category: 'models' },
   { url: 'https://techcrunch.com/category/artificial-intelligence/feed/', source: 'TechCrunch AI', publisherType: 'independent-media', category: 'products' },
   { url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', source: 'The Verge AI', publisherType: 'independent-media', category: 'products' },
   { url: 'https://venturebeat.com/category/ai/feed/', source: 'VentureBeat AI', publisherType: 'independent-media', category: 'products' },

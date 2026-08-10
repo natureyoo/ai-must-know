@@ -22,6 +22,7 @@ function fakeOpenAI({ fail = false } = {}) {
       titleKo: `[번역] ${i.title}`,
       gistKo: '한 줄 핵심',
       summaryKo: `[번역] ${i.summary}`,
+      takeKo: '이 소식이 중요한 이유입니다.',
     }));
     return {
       ok: true,
@@ -59,6 +60,7 @@ test('translates new items and persists Korean title, gist, and summary', async 
     assert.ok(row, `expected a translation row for ${item.id}`);
     assert.equal(row.titleKo, `[번역] ${item.title}`);
     assert.equal(row.gistKo, '한 줄 핵심');
+    assert.equal(row.takeKo, '이 소식이 중요한 이유입니다.');
     assert.equal(row.hash, contentHash(item));
   }
   db.close();
@@ -140,6 +142,7 @@ test('story views carry Korean text when translated and null when not', async ()
   const translated = getStoryViews(db, { includeFixtures: true });
   assert.ok(translated.some((v) => v.titleKo?.startsWith('[번역]')), 'expected at least one Korean title in the view');
   assert.ok(translated.some((v) => v.gistKo === '한 줄 핵심'));
+  assert.ok(translated.some((v) => v.takeKo === '이 소식이 중요한 이유입니다.'), 'the AI take reaches the view');
   db.close();
 });
 
@@ -154,5 +157,30 @@ test('latestCollectedAt reports the newest collection time, which is what the UI
   ]);
 
   assert.equal(latestCollectedAt(db), '2026-08-09T20:00:00.000Z');
+  db.close();
+});
+
+test('a DB written before takeKo existed is migrated in place, not crashed on', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  const path = join(mkdtempSync(join(tmpdir(), 'amk-')), 'old.db');
+  const old = new DatabaseSync(path);
+  old.exec(`CREATE TABLE translations (
+    id TEXT PRIMARY KEY, hash TEXT NOT NULL, titleKo TEXT NOT NULL,
+    summaryKo TEXT NOT NULL, gistKo TEXT NOT NULL, translatedAt TEXT NOT NULL)`);
+  old.exec(`INSERT INTO translations VALUES ('x','h','제목','요약','핵심','2026-08-09T00:00:00.000Z')`);
+  old.close();
+
+  const db = openDb(path);
+  const columns = db.prepare('PRAGMA table_info(translations)').all().map((c) => c.name);
+  assert.ok(columns.includes('takeKo'), 'the new column is added to the existing table');
+  assert.equal(getTranslations(db).get('x').takeKo, '', 'existing rows survive with an empty take');
+
+  const { fetchImpl } = fakeOpenAI();
+  await translateItems(db, items(1), { apiKey: 'sk-test', fetchImpl, log: () => {} });
+  assert.ok([...getTranslations(db).values()].some((r) => r.takeKo));
   db.close();
 });

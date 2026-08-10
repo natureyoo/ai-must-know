@@ -58,6 +58,17 @@ export function cardBrief(text) {
   return brief === cardLead(text) ? '' : brief;
 }
 
+// Viral score rewards accumulated engagement, so a story from two weeks ago
+// can still outrank today's. That is correct for "what is big" and wrong for
+// "what is new", hence a recency window on top of the ranking rather than a
+// change to it. Filters on when the story broke (firstPublishedAt), not on
+// its most recent repost.
+export function withinDays(stories, days, now = new Date()) {
+  if (!days) return stories;
+  const cutoff = now.getTime() - days * 24 * 3600 * 1000;
+  return stories.filter((s) => Date.parse(s.firstPublishedAt ?? s.latestPublishedAt) >= cutoff);
+}
+
 export function localizedRationale(score, lang = 'ko') {
   return (lang === 'ko' && score.rationaleKo) || score.rationale;
 }
