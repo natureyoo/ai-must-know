@@ -18,7 +18,8 @@ export const DEFAULT_FEEDS = [
   // Non-US / open-weight labs. Without these the dashboard reads as if only
   // OpenAI, Google and Anthropic ship anything — Qwen, DeepSeek, Kimi and
   // MiniMax releases were reaching it only as secondhand coverage, if at all.
-  { url: 'https://qwenlm.github.io/blog/index.xml', source: 'Qwen (Alibaba)', publisherType: 'company', category: 'models' },
+  // Qwen is NOT here: qwenlm.github.io's feed stopped in 2025-09 and qwen.ai
+  // has no feed, so it is discovered by domain in src/adapters/labposts.
   { url: 'https://blog.google/innovation-and-ai/technology/ai/rss/', source: 'Google AI Blog', publisherType: 'company', category: 'models' },
   { url: 'https://research.google/blog/rss/', source: 'Google Research', publisherType: 'research-org', category: 'research' },
   { url: 'https://www.microsoft.com/en-us/research/feed/', source: 'Microsoft Research', publisherType: 'research-org', category: 'research' },

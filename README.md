@@ -205,9 +205,13 @@ newest is from September 2025). Stored items are pruned at 180 days
 the rankings — upsert alone never deletes.
 
 - **Feedless labs** (`src/adapters/labposts/index.js`): labs with no public
-  feed (Anthropic, Meta AI, Mistral, xAI, DeepSeek, Moonshot, Z.ai, MiniMax,
-  AI2) discovered by domain through HN's search index, which yields their own
-  posts with canonical URLs.
+  feed (Anthropic, Meta AI, Mistral, xAI, **Qwen**, DeepSeek, Moonshot, Z.ai,
+  MiniMax, AI2) discovered by domain through HN's search index, which yields
+  their own posts with canonical URLs. Qwen belongs here rather than in the
+  feed list: `qwenlm.github.io`'s feed stopped in September 2025 and `qwen.ai`
+  is a SPA that returns the same HTML for every path, so its announcements —
+  including Qwen3.8-Max, 1,121 points on HN — are only reachable by their
+  submitted URL.
 - **Fixtures** (`src/adapters/fixtures/index.js`): 19 hand-written, realistic
   items covering all 7 categories, with deliberately engineered same-URL
   duplicates, similar-title duplicates, cross-platform overlaps, a disputed

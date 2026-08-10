@@ -28,6 +28,11 @@ export const FEEDLESS_LABS = [
   // Open-weight labs whose announcements land as a docs page or a model card
   // rather than a feed. A domain with no recent HN submissions simply yields
   // nothing, so listing one that goes quiet costs nothing.
+  // qwen.ai is a SPA: every path returns the same HTML and there is no feed,
+  // so its announcements are only reachable by their submitted URL. The old
+  // qwenlm.github.io feed has been dead since 2025-09, which is how
+  // Qwen3.8-Max (1,121 points on HN) was missed entirely.
+  { domain: 'qwen.ai', source: 'Qwen (Alibaba)', publisherType: 'company' },
   { domain: 'deepseek.com', source: 'DeepSeek', publisherType: 'company' },
   { domain: 'moonshot.ai', source: 'Moonshot AI (Kimi)', publisherType: 'company' },
   { domain: 'z.ai', source: 'Z.ai (GLM)', publisherType: 'company' },
