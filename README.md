@@ -34,7 +34,8 @@ the app is fully usable offline (all three sources fall back to fixtures)
 and works with no setup at all: first run, empty DB, no `.env` file.
 
 `npm run collect` also renders new items into Korean (see **Language**
-below) when `OPENAI_API_KEY` is set.
+below) through the Claude Code CLI (`TRANSLATOR=claude`) or the OpenAI API
+(`OPENAI_API_KEY`).
 
 `npm run serve` starts an HTTP server (default `http://localhost:3000`)
 serving both the dashboard (`public/`) and the JSON API it calls
@@ -53,7 +54,11 @@ Setup on a fresh repo:
 
 1. Settings → Pages → Source: **GitHub Actions**.
 2. Settings → Secrets and variables → Actions → new secret
-   `OPENAI_API_KEY` (optional — without it the site is English-only).
+   `CLAUDE_CODE_OAUTH_TOKEN`: on a machine where Claude Code is logged in,
+   run `claude setup-token` and paste the token it prints. That is a one-year
+   token tied to your Claude subscription, so the daily Korean text costs no
+   API credits. (`OPENAI_API_KEY` still works as the fallback provider when
+   that secret is absent; with neither, the site is English-only.)
 
 The SQLite DB is carried between runs with `actions/cache`, so previous
 days' stories stay in the pool and already-translated items are never paid
@@ -76,8 +81,21 @@ The dashboard defaults to **Korean**; the header toggle switches to English
 and the choice is remembered in `localStorage`.
 
 Sources publish in English, so `src/translate/index.js` renders each
-collected item into Korean during collection via the OpenAI API, storing
-four fields per item in the `translations` table:
+collected item into Korean during collection, storing four fields per item
+in the `translations` table. The model behind it is chosen by `TRANSLATOR`:
+
+- `claude` — one headless `claude -p` call per batch (`--tools ""`, our own
+  system prompt, JSON schema enforced), run from the OS temp dir so it never
+  picks up a stray CLAUDE.md. Billed to whatever the CLI is logged into:
+  your subscription locally, `CLAUDE_CODE_OAUTH_TOKEN` in CI. Model
+  `CLAUDE_MODEL`, default `opus` — the take is a reasoning task and the
+  subscription makes the price difference moot. This is what
+  `daily.yml` uses.
+- `openai` — the Chat Completions API with `OPENAI_API_KEY` (the original
+  path, default when `TRANSLATOR` is unset). `OPENAI_MODEL` defaults to
+  `gpt-4o`, falling back to `gpt-4o-mini` if the id is rejected.
+
+Both providers get the same prompt and write the same rows:
 
 - `titleKo` — the headline in Korean (product/model names left intact),
 - `gistKo` — **one sentence, 45-90 characters**, carrying the actual news:
@@ -105,17 +123,25 @@ non-HTML target or a timeout yields nothing and the take falls back to being
 written from the summary — collection never fails because a publisher's site
 is slow.
 
-`OPENAI_MODEL` defaults to `gpt-4o`: with only a one-line summary to work
-from, `gpt-4o-mini` produced generic filler ("성능 향상을 포함할 수 있습니다").
-If the configured model id is rejected, the run retries once on
-`gpt-4o-mini` and logs the switch rather than turning the whole site
-English.
+The take prompt bans the filler an LLM reaches for when it has nothing to
+say ("엔지니어들은 …을 주목해야 합니다", "…에 기여할 수 있습니다", "…추가 검증이 필요할
+수 있습니다" without saying what) and requires every claim to be anchored in
+something the article states — including what is conspicuously missing (no
+benchmark, no price, no independent source). On Opus that turns the take
+from a restatement of the headline into the one paragraph worth opening the
+card for; on gpt-4o it mostly stops the worst of it.
 
 A closed card is therefore: verification badge, category, platforms, the
 headline, `발행 <date> · <N일 전>` (the story's earliest publication across
 its sources, so a later repost cannot make old news look new), the one-line
 gist, and the four scores. Everything else — the AI take, the verification
 reasoning, all five score rationales — sits behind toggles.
+
+Every card and detail view ends with **AI에게 더 물어보기: Claude · ChatGPT**.
+Those are plain links to `claude.ai/new?q=…` and `chatgpt.com/?q=…` with the
+headline, the gist and the 원문 URL pre-filled as a question, so "I want to
+know more about this" is one click, answered on the reader's own account —
+no key, no backend, no cost on this side (`askPrompt` in `public/logic.js`).
 
 The home view also has a **최근 7일 / 최근 30일 / 전체 기간** window, defaulting
 to 7 days. The viral score rewards accumulated engagement, so a two-week-old
@@ -129,15 +155,20 @@ hides most open-weight releases. Widening the window is honest; back-dating
 those items to "today" would not be, and every card shows its real 발행 date
 either way.
 
-Work is keyed on a SHA-1 of `title + summary`, so a daily re-collect only
-pays for genuinely new or edited items. Everything the app generates itself
+Work is keyed on a SHA-1 of `title + summary` (digits stripped from the
+summary — HN, GitHub and Hugging Face summaries embed live counts, which
+used to re-translate ~100 unchanged items a day), so a daily re-collect
+only pays for genuinely new or edited items. Pending items are done newest
+first, at most `TRANSLATE_LIMIT` (120) per run: a prompt-version bump makes
+the whole archive pending, and this way the landing page is redone on day
+one without one run tripping a subscription rate limit. Everything the app generates itself
 (verification statuses and reasoning, all five score rationales) is written
 in both languages directly in `src/verification` and `src/scoring` — no API
 call involved, so the explanations are always readable in Korean even when
 translation is off.
 
-Translation is entirely optional. With no `OPENAI_API_KEY`, a failing API,
-or a malformed response, the affected stories simply keep their English
+Translation is entirely optional. With no provider configured, a failing
+API or CLI, or a malformed response, the affected stories simply keep their English
 original and are tagged `원문(영어)` in the UI. Collection never fails
 because of translation.
 
@@ -165,8 +196,12 @@ See `.env.example`. All are optional — the app runs with none of them set.
 | Variable | Used in | Purpose |
 |---|---|---|
 | `GITHUB_TOKEN` | `src/adapters/github/index.js` | GitHub personal access token, sent as a `Bearer` header on the repo-search request to raise the public API's rate limit. Collection still works unauthenticated, just at GitHub's lower unauthenticated limit. |
-| `OPENAI_API_KEY` | `src/translate/index.js` | Used by `npm run collect` to render titles/summaries in Korean. Unset → the dashboard falls back to the English original per story. |
-| `OPENAI_MODEL` | `src/translate/index.js` | Model used for translation and the AI take. Defaults to `gpt-4o`; falls back to `gpt-4o-mini` if the id is rejected. |
+| `TRANSLATOR` | `src/translate/index.js` | `claude` (Claude Code CLI, subscription-billed) or `openai` (default). |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code CLI | From `claude setup-token`; only needed where the CLI is not already logged in (CI). |
+| `CLAUDE_MODEL` | `src/translate/index.js` | Model alias/id for `TRANSLATOR=claude`. Defaults to `opus`. |
+| `TRANSLATE_LIMIT` | `src/translate/index.js` | Max items translated per run, newest first. Defaults to 120. |
+| `OPENAI_API_KEY` | `src/translate/index.js` | Key for `TRANSLATOR=openai`. Unset → those items stay English. |
+| `OPENAI_MODEL` | `src/translate/index.js` | Model for `TRANSLATOR=openai`. Defaults to `gpt-4o`; falls back to `gpt-4o-mini` if the id is rejected. |
 | `RETENTION_DAYS` | `scripts/collect.js` | Days of history to keep; items published before that are deleted after each collection, along with their translations. Defaults to 180. |
 | `DB_PATH` | `scripts/collect.js`, `scripts/serve.js` | Filesystem path to the local SQLite database file. Defaults to `data/app.db`. |
 | `PORT` | `scripts/serve.js` | HTTP port for the web server. Defaults to `3000`. |
@@ -291,10 +326,13 @@ are not the same axis:
 
 - **Dedup is a title-similarity heuristic, not semantic matching**
   (`src/processing/dedup.js`): items merge into one story if they share a
-  URL, or if their titles clear a word-overlap (Jaccard) threshold of 0.3.
-  This can under-merge genuine same-event coverage that uses very different
-  wording (e.g. a terse HN title vs. a descriptive press headline), leaving
-  it as two separate, lower-signal stories instead of one corroborated one.
+  URL, or if their titles share ≥2 tokens, clear an IDF-weighted Jaccard of
+  0.32 (rare words carry the merge, batch-common ones like "cyber" or
+  "capabilities" barely count), and do not carry conflicting version numbers
+  (Gemini 3.5 vs 3.7 are two events). It can still under-merge genuine
+  same-event coverage that uses very different wording, and still over-merge
+  same-version siblings (DeepSeek-V4-Flash vs -Pro) or two unrelated
+  "security disclosure" posts.
 - **Dispute detection is lexical, not a real claim-diff**: it looks for
   conflict-language patterns ("disputed", "denies", "fails to reproduce",
   etc.) between items, not an actual comparison of what each source claims.
@@ -323,8 +361,9 @@ are not the same axis:
   원문 link, and no score is derived from it.
 - **Hugging Face trending is a popularity signal, not an editorial one**: a
   quantised re-upload of last week's hit model can trend above a genuinely
-  new release. The known-org allowlist and a much higher like floor for
-  everyone else filter most of that, but not all. Its `createdAt` is also
+  new release. The known-org allowlist, a much higher like floor for
+  everyone else, and a name filter that drops community quants/fine-tunes
+  (`-GGUF`, `-Uncensored-…`, `-Lora`) filter most of that, but not all. Its `createdAt` is also
   repo-creation time, not "when this became news", which is why the recency
   window offers 30 days.
 - **Korean text is machine translation, not editorial rewriting**

@@ -295,10 +295,23 @@ details.rationale p { margin: 4px 0 0; }
 
 .card-links {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
   font-size: 0.8rem;
   margin-top: auto;
 }
+.card-links .source-link { white-space: nowrap; font-weight: 600; }
+.ask-links { flex-basis: 100%; color: var(--text-muted); }
+.ask-links a {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+}
+.ask-links a:hover { border-color: var(--accent); }
 
 /* Detail view */
 #detail-view { display: flex; flex-direction: column; gap: 18px; }

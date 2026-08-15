@@ -54,8 +54,19 @@ jobs:
           key: aimustknow-db-v2-${{ github.run_id }}
           restore-keys: aimustknow-db-v2-
 
+      # Korean text is written by Claude through the Claude Code CLI, billed
+      # to the subscription behind CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`
+      # on a logged-in machine, then paste into Settings → Secrets). No API
+      # credits involved. Without that secret it falls back to OpenAI, and
+      # without either the site is English-only.
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Collect and translate
         env:
+          TRANSLATOR: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN && 'claude' || 'openai' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: opus
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # raises the GitHub API rate limit
         run: npm run collect

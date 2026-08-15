@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { firstSentences, topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale } from '../public/logic.js';
+import { firstSentences, topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale, askPrompt, ASK_TARGETS } from '../public/logic.js';
 import { getFixtureItems } from '../src/adapters/fixtures/index.js';
 
 const VIEW = {
@@ -161,4 +161,16 @@ test('the window uses when the story broke, not a later repost of it', () => {
   const now = new Date('2026-08-10T00:00:00.000Z');
   const revived = [{ id: 'old-story', firstPublishedAt: '2026-07-20T00:00:00.000Z', latestPublishedAt: '2026-08-09T00:00:00.000Z' }];
   assert.deepEqual(withinDays(revived, 7, now), [], 'a fresh repost must not resurrect three-week-old news');
+});
+
+test('askPrompt hands the AI the headline, the gist and the source URL, and fits in a URL', () => {
+  const view = { title: 'Mistral OCR 4.1', sources: [{ url: 'https://mistral.ai/news/ocr-4-1' }] };
+  const ko = askPrompt(view, { gist: '문단 단위 bbox 지원', summary: '' }, 'ko');
+  assert.ok(ko.includes('Mistral OCR 4.1') && ko.includes('문단 단위 bbox 지원') && ko.includes('https://mistral.ai/news/ocr-4-1'));
+  const en = askPrompt(view, { gist: '', summary: 'Adds paragraph-level boxes.' }, 'en');
+  assert.ok(en.includes('Adds paragraph-level boxes.') && !en.includes('요약'));
+  for (const target of ASK_TARGETS) {
+    const href = target.url(ko);
+    assert.ok(href.startsWith('https://') && href.length < 2000, `${target.key} link must stay a sane URL`);
+  }
 });

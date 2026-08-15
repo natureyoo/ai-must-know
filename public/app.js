@@ -8,7 +8,7 @@
 // below. Every localized read goes through logic.js's `localized()`, which
 // falls back to the English original when a translation is missing.
 
-import { topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale } from './logic.js';
+import { topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale, askPrompt, ASK_TARGETS } from './logic.js';
 
 const CATEGORIES = ['models', 'research', 'products', 'open-source', 'infrastructure', 'business', 'policy', 'funding', 'safety'];
 const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', hf: 'Hugging Face', fixture: 'Fixture' };
@@ -51,6 +51,8 @@ const STRINGS = {
     sources: '관련 출처 · 근거',
     noReactionData: '반응 데이터 없음',
     untranslated: '원문(영어)',
+    ask: 'AI에게 더 물어보기',
+    askTitle: (name) => `${name}에서 이 스토리에 대해 이어서 질문하기 (새 탭)`,
     footerPre: '모든 요약과 점수는 ',
     footerPost: ' 가 반환하는 실데이터를 기반으로 렌더링됩니다.',
     langToggle: 'EN',
@@ -104,6 +106,8 @@ const STRINGS = {
     sources: 'Sources & evidence',
     noReactionData: 'no reaction data',
     untranslated: 'original (EN)',
+    ask: 'Ask an AI',
+    askTitle: (name) => `Continue with ${name} about this story (new tab)`,
     footerPre: 'Every summary and score is rendered from live data returned by ',
     footerPost: '.',
     langToggle: '한국어',
@@ -133,14 +137,13 @@ const STRINGS = {
 // glance rather than needing a sort/filter round-trip per story.
 const TOP_N = 24;
 
-// 30 days by default. 7 was a cliff that kept hiding exactly what someone
-// went looking for — Qwen3.8-Max scored 87 and fell out at 7.04 days old —
-// and a Hugging Face model dates from when its repo was created, weeks
-// before it trends. Nothing is hidden silently: the heading names the
-// window and every card carries its own 발행 date. Back-dating old items so
-// they look current would be the dishonest fix.
+// 7 days by default: the page is "이번 주 Must Know", and a landing view
+// that opens on month-old items reads as stale even when it is not. 30 days
+// and all-time are one click away for the Hugging Face case (a model dates
+// from repo creation, weeks before it trends). Nothing is hidden silently:
+// the heading names the window and every card carries its own 발행 date.
 const PERIODS = [7, 30, 0];
-const state = { category: '', days: 30, lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
+const state = { category: '', days: 7, lang: localStorage.getItem('lang') || 'ko', dataAsOf: null };
 
 const t = () => STRINGS[state.lang];
 
@@ -234,6 +237,16 @@ function takeOrBrief(view, brief) {
   return `<details class="rationale card-brief"><summary>${escapeHtml(t().briefToggle)}</summary><p>${escapeHtml(brief)}</p></details>`;
 }
 
+// Opens claude.ai / chatgpt.com in a new tab with the story pre-filled as a
+// question, so "I want to know more" is one click, on the reader's own
+// account, with no key or backend on this side.
+function askLinks(view, text) {
+  const q = askPrompt(view, text, state.lang);
+  return `<span class="ask-links">${escapeHtml(t().ask)}: ${ASK_TARGETS.map((a) =>
+    `<a class="ask-${a.key}" href="${escapeHtml(a.url(q))}" target="_blank" rel="noopener" title="${escapeHtml(t().askTitle(a.label))}">${a.label}</a>`,
+  ).join(' · ')}</span>`;
+}
+
 function renderCard(view) {
   const s = view.scores;
   const text = localized(view, state.lang);
@@ -274,8 +287,9 @@ function renderCard(view) {
         <ul class="rationale-list">${rationaleList(s)}</ul>
       </details>
       <div class="card-links">
-        <a href="${escapeHtml(primary.url)}" target="_blank" rel="noopener">${escapeHtml(t().source)}</a>
+        <a class="source-link" href="${escapeHtml(primary.url)}" target="_blank" rel="noopener">${escapeHtml(t().source)}</a>
         <span>${escapeHtml(t().evidence)}: ${evidenceLinks}</span>
+        ${askLinks(view, text)}
       </div>
     </article>
   `;
@@ -382,6 +396,10 @@ async function renderDetail(id) {
         <div class="meta-row">
           ${view.platforms.map((p) => `<span class="platform-tag">${PLATFORM_LABELS[p] || p}</span>`).join('')}
           <span class="platform-tag tag-category">${escapeHtml(categoryLabel(view.category))}</span>
+        </div>
+        <div class="card-links">
+          <a class="source-link" href="${escapeHtml(view.sources[0].url)}" target="_blank" rel="noopener">${escapeHtml(t().source)}</a>
+          ${askLinks(view, text)}
         </div>
       </div>
 

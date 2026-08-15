@@ -76,6 +76,11 @@ export async function fetchHuggingFaceModels({
   minLikesUnknownOrg = 300,
   timeoutMs = 10000,
 } = {}) {
+  // A quant, merge or fine-tune of someone else's model is downstream of the
+  // news however many likes it has ("Qwen3.6-…-Uncensored-Heretic-…-GGUF",
+  // "PinkCherry_MiniMax-H3"). Only applied to unknown orgs — a lab's own
+  // FP8/GGUF upload is part of its release.
+  const DERIVATIVE = /gguf|awq|fp8|int[48]|nf4|mlx|exl2|lora|comfy|uncensored|heretic|abliterated|imatrix|quant|merge|distill|turbo/i;
   const url = `${API_URL}?sort=trendingScore&direction=-1&limit=${limit}`;
 
   let payload;
@@ -105,6 +110,7 @@ export async function fetchHuggingFaceModels({
     if (!Number.isFinite(publishedAt) || publishedAt < cutoff) continue;
     const floor = known ? minLikes : Math.max(minLikes, minLikesUnknownOrg);
     if (Number.isFinite(model.likes) && model.likes < floor) continue;
+    if (!known && DERIVATIVE.test(name)) continue;
 
     const item = {
       id: `hf-${model.id.replace(/[^a-zA-Z0-9._-]+/g, '-')}`,

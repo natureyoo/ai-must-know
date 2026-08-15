@@ -92,3 +92,20 @@ export function relativeAge(iso, now = new Date(), lang = 'ko') {
 export function isStale(iso, now = new Date(), maxHours = 30) {
   return now.getTime() - Date.parse(iso) > maxHours * 3600 * 1000;
 }
+
+// "Ask an AI about this" — a prefilled prompt handed to claude.ai / chatgpt.com
+// via their `q` query parameter. No backend, no key: the reader's own account
+// answers, and it can open the 원문 URL itself, which is why the URL is in the
+// prompt rather than a paraphrase of it. Kept short: it lives in a URL.
+export function askPrompt(view, text, lang = 'ko') {
+  const url = view.sources[0].url;
+  const lead = text.gist || text.summary || '';
+  return lang === 'ko'
+    ? `다음 AI 업계 뉴스에 대해 알려줘. 먼저 원문 링크를 읽고, (1) 무슨 일이 있었는지 핵심을 정리하고 (2) 왜 중요한지, 배경 맥락과 함께 설명하고 (3) 과장이나 미확인 주장처럼 주의해서 봐야 할 부분이 있으면 짚어줘. 한국어로 답해줘.\n\n제목: ${view.title}\n${lead ? `요약: ${lead}\n` : ''}원문: ${url}`
+    : `Tell me about this AI-industry story. Read the source link first, then (1) summarize what happened, (2) explain why it matters with background context, and (3) flag anything to be skeptical of (hype, unverified claims).\n\nTitle: ${view.title}\n${lead ? `Summary: ${lead}\n` : ''}Source: ${url}`;
+}
+
+export const ASK_TARGETS = [
+  { key: 'claude', label: 'Claude', url: (q) => `https://claude.ai/new?q=${encodeURIComponent(q)}` },
+  { key: 'chatgpt', label: 'ChatGPT', url: (q) => `https://chatgpt.com/?q=${encodeURIComponent(q)}` },
+];

@@ -63,6 +63,13 @@ function decodeEntities(str) {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
+    // TechCrunch/Verge feeds encode curly quotes and dashes numerically
+    // (&#8217; &#8220; &#8211;), which otherwise reach the page verbatim.
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&(m|n)dash;/g, (_, m) => (m === 'm' ? '—' : '–'))
+    .replace(/&hellip;/g, '…')
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
     .trim();

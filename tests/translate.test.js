@@ -264,3 +264,45 @@ test('retention drops aged-out items and the translations that belonged to them'
   assert.ok(getTranslations(db).has(fresh.id));
   db.close();
 });
+
+test('claude provider: batches go through the CLI adapter, no OpenAI key needed', async () => {
+  const db = openDb(':memory:');
+  const input = items(2);
+  const asked = [];
+  const askClaude = async (userJson, { model }) => {
+    asked.push({ model, items: JSON.parse(userJson).items });
+    return {
+      items: JSON.parse(userJson).items.map((i) => ({
+        id: i.id, titleKo: `[클로드] ${i.title}`, gistKo: '핵심', summaryKo: '요약', takeKo: '관점', category: 'models',
+      })),
+    };
+  };
+
+  const count = await translateItems(db, input, { provider: 'claude', apiKey: '', askClaude, log: () => {}, getArticleTexts: noArticles });
+
+  assert.equal(count, 2);
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0].model, 'opus');
+  assert.equal(getTranslations(db).get(input[0].id).titleKo, `[클로드] ${input[0].title}`);
+  assert.equal(getTranslations(db).get(input[0].id).category, 'models');
+  db.close();
+});
+
+test('a summary whose only change is a live count (HN points, stars) is not re-translated', () => {
+  const item = { ...items(1)[0], summary: 'Hacker News submission with 12 points and 3 comments.' };
+  const later = { ...item, summary: 'Hacker News submission with 979 points and 489 comments.' };
+  assert.equal(contentHash(item), contentHash(later));
+  assert.notEqual(contentHash(item), contentHash({ ...item, title: `${item.title} (updated)` }));
+});
+
+test('TRANSLATE_LIMIT caps a run at the newest pending items', async () => {
+  const db = openDb(':memory:');
+  const { fetchImpl, calls } = fakeOpenAI();
+  const input = items(3).map((i, n) => ({ ...i, publishedAt: `2026-01-0${n + 1}T00:00:00.000Z` }));
+
+  const count = await translateItems(db, input, { apiKey: 'sk-test', fetchImpl, limit: 1, log: () => {}, getArticleTexts: noArticles });
+
+  assert.equal(count, 1);
+  assert.equal(calls[0].body.messages[1].content.includes(input[2].title), true, 'the newest item goes first');
+  db.close();
+});

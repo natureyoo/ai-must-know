@@ -32,7 +32,7 @@ test('an official org release becomes a company-published item, not an anonymous
 
 test('an upload outside a known org is community-published, so it cannot become an Official claim', async () => {
   const [item] = await fetchHuggingFaceModels({
-    fetchImpl: hubResponse([{ ...KIMI, id: 'someone/Kimi-K3-GGUF' }]),
+    fetchImpl: hubResponse([{ ...KIMI, id: 'someone/Kimi-K3-Reupload' }]),
     now: NOW,
   });
 
@@ -66,18 +66,21 @@ test('low-interest and malformed entries are skipped rather than shipped', async
   assert.deepEqual(items.map((i) => i.id), ['hf-moonshotai-Kimi-K3']);
 });
 
-test('community quants and fine-tunes need real traction to qualify as news', async () => {
-  const quant = { ...KIMI, id: 'someone/Kimi-K3-GGUF', likes: 120 };
-  const phenomenon = { ...KIMI, id: 'someone/Kimi-K3-Uncensored', likes: 900 };
+test('community quants and fine-tunes are downstream of the news, whatever their traction; a new lab is not', async () => {
+  const quant = { ...KIMI, id: 'someone/Kimi-K3-GGUF', likes: 3000 };
+  const finetune = { ...KIMI, id: 'someone/Kimi-K3-Uncensored-Heretic', likes: 900 };
+  const newLab = { ...KIMI, id: 'meta-models/Muse-Glimmer-30B', likes: 1500 };
+  const smallLab = { ...KIMI, id: 'meta-models/Muse-Glimmer-7B', likes: 120 };
+  const ownQuant = { ...KIMI, id: 'moonshotai/Kimi-K3-FP8', likes: 50 };
 
   const items = await fetchHuggingFaceModels({
-    fetchImpl: hubResponse([KIMI, quant, phenomenon]),
+    fetchImpl: hubResponse([KIMI, quant, finetune, newLab, smallLab, ownQuant]),
     now: NOW,
     minLikes: 20,
     minLikesUnknownOrg: 300,
   });
 
-  assert.deepEqual(items.map((i) => i.id), ['hf-moonshotai-Kimi-K3', 'hf-someone-Kimi-K3-Uncensored']);
+  assert.deepEqual(items.map((i) => i.id), ['hf-moonshotai-Kimi-K3', 'hf-meta-models-Muse-Glimmer-30B', 'hf-moonshotai-Kimi-K3-FP8']);
 });
 
 test('an unreachable Hub yields no items instead of throwing (the pipeline falls back per source)', async () => {
