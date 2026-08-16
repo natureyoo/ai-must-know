@@ -215,9 +215,11 @@ and GitHub's public search API works without one.
   and research feeds (OpenAI, Google DeepMind, Google AI, Google Research,
   Hugging Face, **Qwen/Alibaba**, Microsoft Research, Berkeley BAIR, GitHub
   AI/ML) plus independent media (TechCrunch, The Verge, VentureBeat, MIT
-  Tech Review, Ars Technica, **MarkTechPost** — which covers open-weight
-  Chinese releases far more closely than the US tech press). Hand-rolled
-  regex XML parsing (no dependency).
+  Tech Review, Ars Technica, **MarkTechPost** and **The Decoder** — both of
+  which cover open-weight Chinese releases far more closely than the US tech
+  press) and the **GitHub Copilot changelog**, the one first-party feed of
+  distribution events ("Grok 4.6 is now available in GitHub Copilot").
+  Hand-rolled regex XML parsing (no dependency).
 - **Hugging Face trending models** (`src/adapters/huggingface/index.js`):
   the public Hub API, no key. This is what actually carries open-weight
   releases — Kimi, Qwen, DeepSeek, MiniMax, GLM, Llama — because those labs
@@ -225,9 +227,13 @@ and GitHub's public search API works without one.
   Uploads under a known org namespace (`moonshotai/`, `deepseek-ai/`,
   `Qwen/`, …) count as that lab publishing its own release; anything else is
   a community re-upload and needs far more traction to qualify as news.
-- **Hacker News** (`src/adapters/hackernews/index.js`): the official
-  Firebase API (`hacker-news.firebaseio.com`), no key needed. Pulls current
-  top stories and keeps ones matching an AI-related keyword filter.
+- **Hacker News** (`src/adapters/hackernews/index.js`): the Algolia search
+  API, no key needed. Every story above 50 points in the last 36 hours —
+  not the front page at the minute the collector runs, which missed anything
+  that peaked earlier in the day (Qwen 3.8 27B at 1,354 points, on
+  2026-08-15) — filtered by an AI keyword list that includes lab and model
+  names (qwen, deepseek, kimi, glm, llama, grok …), since those headlines
+  often carry no generic AI word at all.
 - **GitHub** (`src/adapters/github/index.js`): the public REST search API
   (`api.github.com/search/repositories`). GitHub has no official "trending"
   endpoint, so this approximates it: repos tagged `artificial-intelligence`

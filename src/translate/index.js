@@ -102,11 +102,18 @@ Respond with JSON: {"items":[{"id":"<the id given>","titleKo":"...","gistKo":"..
 
 const FIELDS = ['titleKo', 'gistKo', 'summaryKo', 'takeKo'];
 
+// The prompt bans these; this makes the ban enforced rather than advisory.
+// A rejected row is simply not stored, so the item stays pending and is
+// retried on the next run — no extra cost, no filler on the page.
+const TAKE_FILLER = /주목해야 합니다|고려해야 합니다|평가해야 합니다|기여할 수 있습니다|중요한 단계입니다|향후 발전이 주목됩니다|중요성을 보여줍니다|관건입니다/;
+
 function validRow(entry, allowedIds) {
   return (
     entry &&
     allowedIds.has(entry.id) &&
-    FIELDS.every((k) => typeof entry[k] === 'string' && entry[k].trim() !== '')
+    FIELDS.every((k) => typeof entry[k] === 'string' && entry[k].trim() !== '') &&
+    entry.takeKo.trim().length >= 60 &&
+    !TAKE_FILLER.test(entry.takeKo)
   );
 }
 

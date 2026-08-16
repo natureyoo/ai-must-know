@@ -33,6 +33,8 @@ export function htmlToText(html, { maxChars = 4000 } = {}) {
     .slice(0, maxChars);
 }
 
+const BLOCK_PAGE = /captcha|just a moment|access denied|enable javascript|verify you are human|are you a robot|subscribe to (?:continue|read)|sign in to continue/i;
+
 export async function fetchArticleText(url, { fetchImpl = fetch, timeoutMs = 8000, maxChars = 4000 } = {}) {
   try {
     const res = await fetchImpl(url, {
@@ -46,7 +48,10 @@ export async function fetchArticleText(url, { fetchImpl = fetch, timeoutMs = 800
     const text = htmlToText(await res.text(), { maxChars });
     // A page that reduces to a couple of words is a paywall notice or a JS
     // shell, not an article — better no context than misleading context.
-    return text.length < 200 ? '' : text;
+    // Same for a bot wall or subscription wall long enough to pass the length
+    // check: the take must not be written from a CAPTCHA page.
+    if (text.length < 200 || BLOCK_PAGE.test(text.slice(0, 600))) return '';
+    return text;
   } catch {
     return '';
   }

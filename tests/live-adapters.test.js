@@ -75,39 +75,39 @@ test('fetchRssItems tolerates network errors and HTTP failures per feed, never t
 
 // --- Hacker News -------------------------------------------------------
 
-test('fetchHackerNewsItems keeps AI-related stories and maps HN fields correctly', async () => {
-  const storiesById = {
-    1: { id: 1, type: 'story', title: 'OpenAI releases GPT-5.2', url: 'https://openai.com/blog/gpt-5-2', score: 500, descendants: 200, time: 1754500000 },
-    2: { id: 2, type: 'story', title: 'Show HN: my weekend recipe app', url: 'https://example.com/recipes', score: 10, descendants: 2, time: 1754500000 },
-    3: { id: 3, type: 'job', title: 'We are hiring engineers (AI team)', time: 1754500000 },
+function algolia(hits) {
+  return async (url) => {
+    assert.match(url, /hn\.algolia\.com\/api\/v1\/search\?tags=story&numericFilters=created_at_i>\d+,points>=\d+/);
+    return { ok: true, status: 200, json: async () => ({ hits }) };
   };
-  const fetchImpl = async (url) => {
-    if (url.endsWith('/topstories.json')) return { ok: true, status: 200, json: async () => [1, 2, 3] };
-    const id = Number(url.match(/item\/(\d+)\.json/)[1]);
-    return { ok: true, status: 200, json: async () => storiesById[id] };
-  };
+}
 
-  const items = await fetchHackerNewsItems({ fetchImpl, now: NOW, limit: 3 });
+test('fetchHackerNewsItems keeps AI-related stories (incl. lab/model names) and maps HN fields correctly', async () => {
+  const items = await fetchHackerNewsItems({
+    fetchImpl: algolia([
+      { objectID: '2', title: 'Show HN: my weekend recipe app', url: 'https://example.com/recipes', points: 60, num_comments: 2, created_at_i: 1754500000 },
+      { objectID: '1', title: 'OpenAI releases GPT-5.2', url: 'https://openai.com/blog/gpt-5-2', points: 500, num_comments: 200, created_at_i: 1754500000 },
+      { objectID: '3', title: 'Qwen 3.8 27B', url: 'https://qwen.ai/blog/qwen3.8', points: 1354, num_comments: 770, created_at_i: 1754500000 },
+    ]),
+    now: NOW,
+  });
 
-  assert.equal(items.length, 1);
-  assert.equal(items[0].id, 'hn-1');
-  assert.equal(items[0].url, 'https://openai.com/blog/gpt-5-2');
-  assert.deepEqual(items[0].reactions, { points: 500, comments: 200 });
+  assert.deepEqual(items.map((i) => i.id), ['hn-3', 'hn-1'], 'AI stories only, most points first; "Qwen" alone must qualify');
+  assert.equal(items[1].url, 'https://openai.com/blog/gpt-5-2');
+  assert.deepEqual(items[1].reactions, { points: 500, comments: 200 });
   assert.deepEqual(validateSourceItem(items[0]), []);
 });
 
 test('fetchHackerNewsItems falls back to the HN permalink when a story has no external url', async () => {
-  const fetchImpl = async (url) => {
-    if (url.endsWith('/topstories.json')) return { ok: true, status: 200, json: async () => [42] };
-    return { ok: true, status: 200, json: async () => ({ id: 42, type: 'story', title: 'Ask HN: best local LLM setup?', score: 88, descendants: 40, time: 1754500000 }) };
-  };
-
-  const items = await fetchHackerNewsItems({ fetchImpl, now: NOW });
+  const items = await fetchHackerNewsItems({
+    fetchImpl: algolia([{ objectID: '42', title: 'Ask HN: best local LLM setup?', points: 88, num_comments: 40, created_at_i: 1754500000 }]),
+    now: NOW,
+  });
   assert.equal(items.length, 1);
   assert.equal(items[0].url, 'https://news.ycombinator.com/item?id=42');
 });
 
-test('fetchHackerNewsItems returns [] when the topstories call fails, without throwing', async () => {
+test('fetchHackerNewsItems returns [] when the search call fails, without throwing', async () => {
   const fetchImpl = async () => {
     throw new Error('offline');
   };
@@ -115,16 +115,16 @@ test('fetchHackerNewsItems returns [] when the topstories call fails, without th
   assert.deepEqual(items, []);
 });
 
-test('fetchHackerNewsItems tolerates a single failed item fetch and still returns the rest', async () => {
+test('fetchHackerNewsItems asks for a time window, not the front page, and caps results', async () => {
+  let seen;
   const fetchImpl = async (url) => {
-    if (url.endsWith('/topstories.json')) return { ok: true, status: 200, json: async () => [1, 2] };
-    if (url.includes('/item/1.json')) throw new Error('timeout');
-    return { ok: true, status: 200, json: async () => ({ id: 2, type: 'story', title: 'New open LLM benchmark released', score: 88, descendants: 12, time: 1754500000 }) };
+    seen = url;
+    return { ok: true, status: 200, json: async () => ({ hits: Array.from({ length: 5 }, (_, i) => ({ objectID: String(i), title: `AI story ${i}`, url: `https://x.test/${i}`, points: 100 - i, num_comments: 1, created_at_i: 1754500000 })) }) };
   };
-
-  const items = await fetchHackerNewsItems({ fetchImpl, now: NOW });
-  assert.equal(items.length, 1);
-  assert.equal(items[0].id, 'hn-2');
+  const items = await fetchHackerNewsItems({ fetchImpl, now: NOW, windowHours: 36, minPoints: 50, maxResults: 3 });
+  const since = Math.floor(NOW.getTime() / 1000) - 36 * 3600;
+  assert.ok(seen.includes(`created_at_i>${since},points>=50`), seen);
+  assert.equal(items.length, 3);
 });
 
 // --- GitHub --------------------------------------------------------------
@@ -216,4 +216,20 @@ test('an abandoned feed contributes nothing rather than year-old posts', async (
   });
 
   assert.deepEqual(items.map((i) => i.title), ['Something recent']);
+});
+
+test('canonicalUrl treats tracking-parameter and www/trailing-slash variants as one document', async () => {
+  const { canonicalUrl } = await import('../src/adapters/sourceItem.js');
+  const a = canonicalUrl('https://www.theverge.com/ai/123?utm_source=hn&utm_medium=social#top');
+  assert.equal(a, canonicalUrl('https://theverge.com/ai/123/'));
+  assert.equal(canonicalUrl('https://x.test/a?b=1&page=2'), canonicalUrl('https://x.test/a?page=2&b=1'), 'param order is irrelevant');
+  assert.notEqual(canonicalUrl('https://x.test/a?page=2'), canonicalUrl('https://x.test/a?page=3'), 'real params still distinguish');
+  assert.equal(canonicalUrl('not a url'), 'not a url', 'unparseable input falls back instead of throwing');
+});
+
+test('fetchRssItems strips HTML that arrives entity-escaped inside <content>', async () => {
+  const xml = `<?xml version="1.0"?><feed><entry><title>Qwen 3.8 megathread</title><link href="https://reddit.test/r/x/1"/><published>2026-08-01T00:00:00Z</published><content>&lt;div class="md"&gt;&lt;p&gt;Weights are &lt;strong&gt;out&lt;/strong&gt;.&lt;/p&gt;&lt;/div&gt;</content></entry></feed>`;
+  const items = await fetchRssItems({ fetchImpl: async () => ({ ok: true, status: 200, text: async () => xml }), feeds: [{ url: 'https://reddit.test/.rss', source: 'r/test', publisherType: 'community', category: 'models' }], now: NOW });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].summary, 'Weights are out .');
 });

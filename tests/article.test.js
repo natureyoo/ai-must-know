@@ -78,3 +78,9 @@ test('fetching many articles is bounded and skips the ones that fail', async () 
   assert.ok(!byId.has('i3'));
   assert.ok(peak <= 4, `concurrency cap must hold, saw ${peak} in flight`);
 });
+
+test('a bot wall or subscription wall long enough to pass the length check is still rejected', async () => {
+  const wall = 'Just a moment... Checking if the site connection is secure. ' + 'Please stand by while we verify your browser. '.repeat(8);
+  const text = await fetchArticleText('https://example.com/x', { fetchImpl: response(page(`<article>${wall}</article>`)) });
+  assert.equal(text, '', 'the take must never be written from a CAPTCHA page');
+});

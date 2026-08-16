@@ -105,3 +105,23 @@ export function assertValidSourceItem(item) {
     throw new Error(`Invalid source item (id=${item?.id ?? 'unknown'}): ${errors.join('; ')}`);
   }
 }
+
+// One canonical form for "is this the same document?", shared by dedup
+// (same-URL merge) and verification (independent-origin count). Tracking
+// parameters matter there: an HN submission of `theverge.com/x?utm_source=hn`
+// and the feed's `theverge.com/x` used to count as two independent origins,
+// which is one document masquerading as corroboration.
+const TRACKING_PARAMS = /^(utm_|fbclid$|gclid$|ref$|ref_src$|source$|spm$|mc_cid$|mc_eid$|igshid$|si$)/i;
+
+export function canonicalUrl(url) {
+  try {
+    const u = new URL(url.trim());
+    u.hash = '';
+    u.hostname = u.hostname.toLowerCase().replace(/^www\./, '');
+    for (const key of [...u.searchParams.keys()]) if (TRACKING_PARAMS.test(key)) u.searchParams.delete(key);
+    u.searchParams.sort();
+    return u.toString().replace(/\/+$/, '').replace(/\?$/, '');
+  } catch {
+    return url.trim().toLowerCase().replace(/\/+$/, '');
+  }
+}

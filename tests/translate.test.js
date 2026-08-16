@@ -26,7 +26,7 @@ function fakeOpenAI({ fail = false } = {}) {
       titleKo: `[번역] ${i.title}`,
       gistKo: '한 줄 핵심',
       summaryKo: `[번역] ${i.summary}`,
-      takeKo: '이 소식이 중요한 이유입니다.',
+      takeKo: '가중치가 공개돼 자체 검증은 가능하지만 코드 생성 벤치마크는 빠져 있어 실제 코딩 성능은 아직 판단하기 이릅니다.',
     }));
     return {
       ok: true,
@@ -64,7 +64,7 @@ test('translates new items and persists Korean title, gist, and summary', async 
     assert.ok(row, `expected a translation row for ${item.id}`);
     assert.equal(row.titleKo, `[번역] ${item.title}`);
     assert.equal(row.gistKo, '한 줄 핵심');
-    assert.equal(row.takeKo, '이 소식이 중요한 이유입니다.');
+    assert.match(row.takeKo, /^가중치가 공개돼/);
     assert.equal(row.hash, contentHash(item));
   }
   db.close();
@@ -146,7 +146,7 @@ test('story views carry Korean text when translated and null when not', async ()
   const translated = getStoryViews(db, { includeFixtures: true });
   assert.ok(translated.some((v) => v.titleKo?.startsWith('[번역]')), 'expected at least one Korean title in the view');
   assert.ok(translated.some((v) => v.gistKo === '한 줄 핵심'));
-  assert.ok(translated.some((v) => v.takeKo === '이 소식이 중요한 이유입니다.'), 'the AI take reaches the view');
+  assert.ok(translated.some((v) => /^가중치가 공개돼/.test(v.takeKo)), 'the AI take reaches the view');
   db.close();
 });
 
@@ -273,7 +273,7 @@ test('claude provider: batches go through the CLI adapter, no OpenAI key needed'
     asked.push({ model, items: JSON.parse(userJson).items });
     return {
       items: JSON.parse(userJson).items.map((i) => ({
-        id: i.id, titleKo: `[클로드] ${i.title}`, gistKo: '핵심', summaryKo: '요약', takeKo: '관점', category: 'models',
+        id: i.id, titleKo: `[클로드] ${i.title}`, gistKo: '핵심', summaryKo: '요약', takeKo: '가중치가 공개돼 자체 검증은 가능하지만 코드 생성 벤치마크는 빠져 있어 실제 코딩 성능은 아직 판단하기 이릅니다.', category: 'models',
       })),
     };
   };
@@ -304,5 +304,24 @@ test('TRANSLATE_LIMIT caps a run at the newest pending items', async () => {
 
   assert.equal(count, 1);
   assert.equal(calls[0].body.messages[1].content.includes(input[2].title), true, 'the newest item goes first');
+  db.close();
+});
+
+test('a take made of banned filler, or too short to say anything, is not stored — the item stays pending', async () => {
+  const db = openDb(':memory:');
+  const input = items(2);
+  const askClaude = async (userJson) => ({
+    items: JSON.parse(userJson).items.map((i, n) => ({
+      id: i.id, titleKo: `[클로드] ${i.title}`, gistKo: '핵심', summaryKo: '요약', category: 'models',
+      takeKo: n === 0
+        ? '이 발표는 중요한 신호입니다. 엔지니어들은 이러한 변화가 실무에 미칠 영향을 면밀히 주목해야 합니다. 향후 발전이 주목됩니다.'
+        : '짧음',
+    })),
+  });
+
+  const count = await translateItems(db, input, { provider: 'claude', askClaude, log: () => {}, getArticleTexts: noArticles });
+
+  assert.equal(count, 0);
+  assert.equal(getTranslations(db).size, 0);
   db.close();
 });

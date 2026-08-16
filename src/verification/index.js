@@ -45,6 +45,8 @@ export const VERIFICATION_STATUS_LABELS_KO = {
 // Verified; two distinct publishers is still more than "a single influential
 // source," so this is left as-is rather than special-cased for a scenario
 // no fixture exercises.
+import { canonicalUrl } from '../adapters/sourceItem.js';
+
 const CREDIBLE_INDEPENDENT_TYPES = ['independent-media', 'research-org', 'government'];
 
 // ponytail: lexical conflict markers, not semantic claim comparison —
@@ -53,14 +55,11 @@ const CREDIBLE_INDEPENDENT_TYPES = ['independent-media', 'research-org', 'govern
 const DISPUTE_PATTERN =
   /\bdisputed?\b|\bdon'?t reproduce\b|\bdoesn'?t reproduce\b|\bfails? to reproduce\b|\bunable to reproduce\b|\bcan'?t (?:verify|reproduce)\b|\bdenies?\b|\brefutes?\b|\bcontradicts?\b/i;
 
-function normalizeUrl(url) {
-  return url.trim().toLowerCase().replace(/\/+$/, '');
-}
 
 function groupByOrigin(items) {
   const groups = new Map();
   for (const item of items) {
-    const key = normalizeUrl(item.url);
+    const key = canonicalUrl(item.url);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }

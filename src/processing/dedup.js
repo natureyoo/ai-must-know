@@ -23,6 +23,8 @@
 // ponytail: word-overlap title similarity with batch IDF, not embeddings —
 // upgrade to a semantic similarity model if this starts missing real
 // near-duplicates. Pairwise O(n^2); fine at a few thousand items per batch.
+import { canonicalUrl } from '../adapters/sourceItem.js';
+
 const TITLE_SIMILARITY_THRESHOLD = 0.32;
 const MIN_SHARED_TOKENS = 2;
 
@@ -108,12 +110,9 @@ export function titleSimilarity(titleA, titleB) {
   return weightedJaccard(a, b, FLAT).score;
 }
 
-function normalizeUrl(url) {
-  return url.trim().toLowerCase().replace(/\/+$/, '');
-}
 
 function mergeable(itemA, itemB, idf) {
-  if (normalizeUrl(itemA.url) === normalizeUrl(itemB.url)) return true;
+  if (canonicalUrl(itemA.url) === canonicalUrl(itemB.url)) return true;
   const [a, b] = tokenSets(itemA.title, itemB.title);
   if (versionsConflict(a, b)) return false;
   const { score, shared } = weightedJaccard(a, b, idf);

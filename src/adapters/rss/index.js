@@ -33,6 +33,13 @@ export const DEFAULT_FEEDS = [
   { url: 'https://venturebeat.com/category/ai/feed/', source: 'VentureBeat AI', publisherType: 'independent-media', category: 'products' },
   { url: 'https://www.technologyreview.com/feed/', source: 'MIT Technology Review', publisherType: 'independent-media', category: 'research' },
   { url: 'https://arstechnica.com/ai/feed/', source: 'Ars Technica AI', publisherType: 'independent-media', category: 'products' },
+  // Distribution events — "model X is now in product Y" — which no other
+  // source here carries firsthand.
+  { url: 'https://github.blog/changelog/label/copilot/feed/', source: 'GitHub Copilot Changelog', publisherType: 'company', category: 'products' },
+  // Follows Chinese labs and capital moves the US press skips.
+  { url: 'https://the-decoder.com/feed/', source: 'The Decoder', publisherType: 'independent-media', category: 'models' },
+  // Not here: r/LocalLLaMA's RSS — Reddit answers 429 to anything that is
+  // not a browser after a couple of requests, so from CI it yields nothing.
 ];
 
 // Best-effort per-item category refinement from title/summary text — feed
@@ -55,10 +62,11 @@ function classifyCategory(text, fallback) {
   return fallback;
 }
 
-function decodeEntities(str) {
+// One pass of entity decoding. Applied twice below: Reddit (and some
+// GitHub-release feeds) put HTML inside the XML text node, so the tags and
+// their entities arrive double-escaped (&amp;#39; → &#39; → ').
+function decodeOnce(str) {
   return str
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<[^>]+>/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
@@ -70,7 +78,14 @@ function decodeEntities(str) {
     .replace(/&nbsp;/g, ' ')
     .replace(/&(m|n)dash;/g, (_, m) => (m === 'm' ? '—' : '–'))
     .replace(/&hellip;/g, '…')
-    .replace(/&amp;/g, '&')
+    .replace(/&amp;/g, '&');
+}
+
+function decodeEntities(str) {
+  const text = str.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, ' ');
+  return decodeOnce(decodeOnce(text))
+    // Tags that only became tags after decoding.
+    .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
