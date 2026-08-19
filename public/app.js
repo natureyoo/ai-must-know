@@ -8,7 +8,7 @@
 // below. Every localized read goes through logic.js's `localized()`, which
 // falls back to the English original when a translation is missing.
 
-import { topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale, askPrompt, ASK_TARGETS } from './logic.js';
+import { topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, isNew, relativeAge, isStale, askPrompt, ASK_TARGETS } from './logic.js';
 
 const CATEGORIES = ['models', 'research', 'products', 'open-source', 'infrastructure', 'business', 'policy', 'funding', 'safety'];
 const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', hf: 'Hugging Face', fixture: 'Fixture' };
@@ -28,7 +28,7 @@ const STRINGS = {
     storyCount: (n, period) => `${n}개 스토리 · ${period} · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스)`,
     periodChip: (days) => (days ? `최근 ${days}일` : '전체 기간'),
     periodTitle: (days) => (days ? `최근 ${days}일` : '전체 기간'),
-    periodNote: (days) => (days ? `최근 ${days}일 발행` : '전체 기간'),
+    periodNote: (days) => (days ? `최근 ${days}일 소식` : '전체 기간'),
     emptyRecent: '이 기간에 발행된 스토리가 없습니다. 기간을 넓혀보세요.',
     empty: '이 필터에 해당하는 스토리가 없습니다.',
     loadFailed: (msg) => `데이터를 불러오지 못했습니다: ${msg}`,
@@ -43,8 +43,9 @@ const STRINGS = {
     takeToggle: 'AI 관점 · 왜 중요한가',
     takeDisclaimer: '이 항목은 원문을 바탕으로 AI가 작성한 해석입니다. 사실 확인은 원문·근거 링크를 확인하세요.',
     published: (date, ago) => `발행 ${date} · ${ago}`,
-    whyScore: '점수 산출 근거 보기',
+    whyScore: '왜 이 점수인가 · 검증 근거',
     whyVerification: '검증 판단 이유',
+    newBadge: 'NEW',
     independentSources: (n) => `독립 출처 ${n}개`,
     timeline: '타임라인',
     reactions: '플랫폼별 반응',
@@ -83,7 +84,7 @@ const STRINGS = {
     storyCount: (n, period) => `${n} stories · ${period} · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus)`,
     periodChip: (days) => (days ? `Last ${days} days` : 'All time'),
     periodTitle: (days) => (days ? `last ${days} days` : 'all time'),
-    periodNote: (days) => (days ? `published in the last ${days} days` : 'all time'),
+    periodNote: (days) => (days ? `active in the last ${days} days` : 'all time'),
     emptyRecent: 'Nothing was published in this window. Try a wider one.',
     empty: 'No stories match this filter.',
     loadFailed: (msg) => `Could not load data: ${msg}`,
@@ -98,8 +99,9 @@ const STRINGS = {
     takeToggle: 'AI take · why it matters',
     takeDisclaimer: 'Written by AI from the original. Check the source and evidence links before relying on it.',
     published: (date, ago) => `Published ${date} · ${ago}`,
-    whyScore: 'Why these scores?',
+    whyScore: 'Why this score · verification',
     whyVerification: 'Why this verification status?',
+    newBadge: 'NEW',
     independentSources: (n) => `${n} independent source${n === 1 ? '' : 's'}`,
     timeline: 'Timeline',
     reactions: 'Reactions by platform',
@@ -207,16 +209,6 @@ function renderAsOf() {
     `<span class="asof-note">${escapeHtml(stale ? t().asOfStale : t().asOfSchedule)}</span>`;
 }
 
-// Compact score strip: the four axes as labelled numbers, with the full
-// rationale for all five kept one click away (item 11) instead of stacked on
-// the card, so a card can be read at a glance.
-function scorePills(scores) {
-  const labels = t().scoreLabels;
-  return ['viral', 'influence', 'credibility', 'impact']
-    .map((key) => `<span class="pill"><span class="pill-label">${escapeHtml(labels[key])}</span><span class="pill-value">${scores[key].value}</span></span>`)
-    .join('');
-}
-
 function rationaleList(scores) {
   const labels = t().scoreLabels;
   return ['mustKnow', 'viral', 'influence', 'credibility', 'impact']
@@ -247,25 +239,32 @@ function askLinks(view, text) {
   ).join(' · ')}</span>`;
 }
 
+// A card is: status, category, headline, date, gist, the AI take behind one
+// toggle, and links. Platform tags (every story is "RSS · Hacker News"), the
+// four sub-score pills and a second/third toggle were metadata crowding out
+// the news; the sub-scores and the verification reasoning still live under
+// the one "why this score" toggle.
 function renderCard(view) {
   const s = view.scores;
   const text = localized(view, state.lang);
   const lead = cardLead(text);
   const brief = cardBrief(text);
-  const platforms = view.platforms.map((p) => `<span class="platform-tag">${PLATFORM_LABELS[p] || p}</span>`).join('');
   const primary = view.sources[0];
+  const seen = new Set();
   const evidenceLinks = view.sources
+    .filter((src) => !seen.has(src.source) && seen.add(src.source))
     .slice(0, 3)
     .map((src) => `<a href="${escapeHtml(src.url)}" target="_blank" rel="noopener">${escapeHtml(src.source)}</a>`)
     .join(' · ');
+  const fresh = state.dataAsOf && isNew(view, state.dataAsOf);
 
   return `
     <article class="card">
       <div class="card-head">
         <div class="meta-row">
+          ${fresh ? `<span class="badge badge-new">${escapeHtml(t().newBadge)}</span>` : ''}
           <span class="${badgeClass(view.verification.status)}">${escapeHtml(text.verificationLabel)}</span>
           <span class="platform-tag tag-category">${escapeHtml(categoryLabel(view.category))}</span>
-          ${platforms}
           ${text.translated ? '' : `<span class="platform-tag tag-untranslated">${escapeHtml(t().untranslated)}</span>`}
         </div>
         <div class="mustknow-badge" title="${escapeHtml(t().scoreLabels.mustKnow)}">
@@ -274,16 +273,13 @@ function renderCard(view) {
         </div>
       </div>
       <h2 class="card-title"><a href="#/story/${encodeURIComponent(view.id)}">${escapeHtml(text.title)}</a></h2>
+      ${text.originalTitle ? `<p class="card-original-title">${escapeHtml(text.originalTitle)}</p>` : ''}
       <p class="card-date">${escapeHtml(publishedLine(view.firstPublishedAt))}</p>
       ${lead ? `<p class="card-gist">${escapeHtml(lead)}</p>` : ''}
       ${takeOrBrief(view, brief)}
-      <div class="score-pills">${scorePills(s)}</div>
-      <details class="rationale">
-        <summary>${escapeHtml(t().whyVerification)}</summary>
-        <p>${escapeHtml(text.verificationReason)}</p>
-      </details>
       <details class="rationale">
         <summary>${escapeHtml(t().whyScore)}</summary>
+        <p>${escapeHtml(text.verificationReason)}</p>
         <ul class="rationale-list">${rationaleList(s)}</ul>
       </details>
       <div class="card-links">
@@ -389,6 +385,7 @@ async function renderDetail(id) {
       <div class="detail-header">
         <span class="${badgeClass(view.verification.status)}">${escapeHtml(text.verificationLabel)}</span>
         <h1>${escapeHtml(text.title)}</h1>
+        ${text.originalTitle ? `<p class="card-original-title">${escapeHtml(text.originalTitle)}</p>` : ''}
         <p class="card-date">${escapeHtml(publishedLine(view.firstPublishedAt))}</p>
         ${text.gist ? `<p class="card-gist">${escapeHtml(text.gist)}</p>` : ''}
         ${text.summary ? `<p class="card-summary">${escapeHtml(text.summary)}</p>` : ''}

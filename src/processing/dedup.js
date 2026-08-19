@@ -19,6 +19,14 @@
 //     buildStories was handed. Rare words carry the merge ("twitch",
 //     "shieldstral"); batch-common ones barely count, which is what keeps
 //     "frontier/cyber/capabilities" from fusing an OpenAI post with GLM-5.3.
+//  6. Size guard, same shape as the version guard: "27B" and "2.4T" are two
+//     models. Without it Qwen3.8-27B-FP8 ~ Qwen3.8-2.4T-A95B-FP8 on
+//     {qwen3.8, fp8} chained the small release into the big one.
+//  7. Time gate: title-only merges need publish dates within 7 days. Same
+//     event, two outlets: hours apart. Same words, four months apart
+//     (DeepSeek-V4-Flash's April repo vs the August V4-Pro post): two events
+//     that union-find used to fuse into one story dated April — which the
+//     7-day landing view then hid entirely.
 
 // ponytail: word-overlap title similarity with batch IDF, not embeddings —
 // upgrade to a semantic similarity model if this starts missing real
@@ -27,6 +35,7 @@ import { canonicalUrl } from '../adapters/sourceItem.js';
 
 const TITLE_SIMILARITY_THRESHOLD = 0.32;
 const MIN_SHARED_TOKENS = 2;
+const MAX_TITLE_MERGE_GAP_MS = 7 * 24 * 3600 * 1000;
 
 const STOPWORDS = new Set([
   // Function words. They never carry the story, but two outlets phrase the
@@ -48,6 +57,8 @@ const STOPWORDS = new Set([
 // "3.5", "5.6", "1.2" — including when glued to a name ("Qwen3.8-27B").
 const VERSION = /\d+(?:\.\d+)+/g;
 const BARE_VERSION = /^\d+(?:\.\d+)+$/;
+// "27b", "2.4t", "106b" — parameter counts, glued or not.
+const SIZE = /\b\d+(?:\.\d+)?[bt]\b/g;
 
 function tokenize(text) {
   // Half the feeds ship raw HTML entities ("Zuckerberg&#8217;s"); a space
@@ -65,7 +76,7 @@ function tokenize(text) {
     if (BARE_VERSION.test(token)) continue;
     if (token.length > 1 && !STOPWORDS.has(token)) tokens.add(token);
   }
-  return { tokens, versions: new Set(clean.match(VERSION) ?? []) };
+  return { tokens, versions: new Set(clean.match(VERSION) ?? []), sizes: new Set(clean.match(SIZE) ?? []) };
 }
 
 // Adapter-built titles are "<model or repo name> — <org or description>".
@@ -97,12 +108,14 @@ function weightedJaccard(a, b, idf) {
   return { score: union === 0 ? 0 : intersection / union, shared };
 }
 
-function versionsConflict(a, b) {
-  if (a.versions.size === 0 || b.versions.size === 0) return false;
-  for (const version of a.versions) {
-    if (b.versions.has(version)) return false;
-  }
+function disjoint(a, b) {
+  if (a.size === 0 || b.size === 0) return false;
+  for (const v of a) if (b.has(v)) return false;
   return true;
+}
+
+function versionsConflict(a, b) {
+  return disjoint(a.versions, b.versions) || disjoint(a.sizes, b.sizes);
 }
 
 export function titleSimilarity(titleA, titleB) {
@@ -113,6 +126,7 @@ export function titleSimilarity(titleA, titleB) {
 
 function mergeable(itemA, itemB, idf) {
   if (canonicalUrl(itemA.url) === canonicalUrl(itemB.url)) return true;
+  if (Math.abs(Date.parse(itemA.publishedAt) - Date.parse(itemB.publishedAt)) > MAX_TITLE_MERGE_GAP_MS) return false;
   const [a, b] = tokenSets(itemA.title, itemB.title);
   if (versionsConflict(a, b)) return false;
   const { score, shared } = weightedJaccard(a, b, idf);

@@ -31,7 +31,7 @@ export const DEFAULT_FEEDS = [
   { url: 'https://techcrunch.com/category/artificial-intelligence/feed/', source: 'TechCrunch AI', publisherType: 'independent-media', category: 'products' },
   { url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', source: 'The Verge AI', publisherType: 'independent-media', category: 'products' },
   { url: 'https://venturebeat.com/category/ai/feed/', source: 'VentureBeat AI', publisherType: 'independent-media', category: 'products' },
-  { url: 'https://www.technologyreview.com/feed/', source: 'MIT Technology Review', publisherType: 'independent-media', category: 'research' },
+  { url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed/', source: 'MIT Technology Review', publisherType: 'independent-media', category: 'research' },
   { url: 'https://arstechnica.com/ai/feed/', source: 'Ars Technica AI', publisherType: 'independent-media', category: 'products' },
   // Distribution events — "model X is now in product Y" — which no other
   // source here carries firsthand.

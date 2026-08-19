@@ -8,7 +8,7 @@
 // points floor in the last `windowHours` instead, and keeps the AI-looking
 // ones. Never throws — a failed call yields [] and the fixture fallback.
 
-import { assertValidSourceItem } from '../sourceItem.js';
+import { assertValidSourceItem, publisherForUrl } from '../sourceItem.js';
 
 const ALGOLIA_URL = 'https://hn.algolia.com/api/v1/search';
 
@@ -46,14 +46,19 @@ export async function fetchHackerNewsItems({
   for (const hit of hits.sort((a, b) => (b.points ?? 0) - (a.points ?? 0))) {
     if (!hit?.objectID || !hit.title || !hit.created_at_i || !AI_KEYWORDS.test(hit.title)) continue;
 
+    // The submission is the linked page: an HN post of cursor.com/blog IS a
+    // Cursor announcement, so it carries that publisher (and its host as the
+    // source name), not "community". Self posts and unknown hosts stay HN.
+    const url = hit.url || `https://news.ycombinator.com/item?id=${hit.objectID}`;
+    const { host, publisherType } = publisherForUrl(url);
     const item = {
       id: idFor(hit.objectID),
       sourceType: 'hn',
-      source: 'Hacker News',
-      publisherType: 'community',
+      source: publisherType === 'community' ? 'Hacker News' : host,
+      publisherType,
       category: null,
       title: hit.title,
-      url: hit.url || `https://news.ycombinator.com/item?id=${hit.objectID}`,
+      url,
       summary: `Hacker News submission with ${hit.points ?? 0} points and ${hit.num_comments ?? 0} comments.`,
       publishedAt: new Date(hit.created_at_i * 1000).toISOString(),
       collectedAt: now.toISOString(),

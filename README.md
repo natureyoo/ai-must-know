@@ -97,16 +97,26 @@ in the `translations` table. The model behind it is chosen by `TRANSLATOR`:
 
 Both providers get the same prompt and write the same rows:
 
-- `titleKo` — the headline in Korean (product/model names left intact),
-- `gistKo` — **one sentence, 45-90 characters**, carrying the actual news:
-  the actor, the thing, and every concrete figure, model name or benchmark in
-  the source. This is the line the card is built around, so the grid can be
-  read without opening anything; the prompt rejects both vague ("새로운 결과를
-  발표했습니다") and headline-restating output,
-- `summaryKo` — the original's content compressed to **at most 2 sentences**,
-  adding what the gist had no room for (shown on the detail view),
-- `takeKo` — 2-3 sentences of **AI commentary**: why this matters, what to
-  watch, what to be skeptical of. This is the only generated field allowed to
+- `titleKo` — a Korean **news headline rewritten from the facts**, not a
+  rendering of the English title: 20-40 characters, subject set off with a
+  comma, noun ending ("공개", "출시", "50% 인하"), product/model names left in
+  Latin script. A product-name-only original ("Grok 4.6") gets the actor and
+  the one fact that makes it news. Literal renderings ("~을 사용자 손에",
+  "~하기", "~에 관하여"), 합니다체 endings and HN/HF tails ("[pdf]", " — org")
+  are rejected by a regex and the item is retried next run,
+- `gistKo` — **one sentence, 50-80 characters, 했다체**, carrying the actual
+  news: the actor, the thing, and the single most important figure, model
+  name or price. This is the line the card is built around, so the grid can
+  be read without opening anything; the prompt rejects vague ("새로운 결과를
+  발표했다") and headline-restating output, and a validator rejects a gist
+  that reports Hacker News points or Hugging Face download counts — those
+  are the platform's counters, not the news,
+- `summaryKo` — the original's content compressed to **at most 2 sentences,
+  120 characters**, adding what the gist had no room for (detail view only),
+- `takeKo` — 2-3 sentences (≤250 characters, 했다체) of **AI commentary**:
+  why this matters, what to watch, what to be skeptical of. When the
+  article text could not be fetched it is exactly one sentence saying so,
+  rather than three sentences of hedging. This is the only generated field allowed to
   interpret rather than report; the prompt forbids inventing figures or
   events, requires the take to be anchored in something the article actually
   says, and requires uncertainty to be marked as such. It is what the card's
@@ -131,11 +141,14 @@ benchmark, no price, no independent source). On Opus that turns the take
 from a restatement of the headline into the one paragraph worth opening the
 card for; on gpt-4o it mostly stops the worst of it.
 
-A closed card is therefore: verification badge, category, platforms, the
-headline, `발행 <date> · <N일 전>` (the story's earliest publication across
-its sources, so a later repost cannot make old news look new), the one-line
-gist, and the four scores. Everything else — the AI take, the verification
-reasoning, all five score rationales — sits behind toggles.
+A closed card is therefore: NEW/verification badge, category, the Must Know
+number, the headline, `발행 <date> · <N일 전>` (the story's earliest
+publication across its sources, so a later repost cannot make old news look
+new), and the one-line gist. Everything else — the AI take, the verification
+reasoning, all five score rationales — sits behind two toggles. Platform
+tags and the four sub-score pills used to sit on the card too; a reader
+review found the card was 70% metadata and 30% news, and the sub-scores are
+still one click away under "왜 이 점수인가".
 
 Every card and detail view ends with **AI에게 더 물어보기: Claude · ChatGPT**.
 Those are plain links to `claude.ai/new?q=…` and `chatgpt.com/?q=…` with the
@@ -149,11 +162,16 @@ story can legitimately outrank today's; that is right for "what is big" and
 wrong for a page titled "오늘의 Must Know", so recency is a filter on top of
 the ranking rather than a change to it.
 
-30 days exists because a Hugging Face model's publication date is when its
-repo was created, which is routinely weeks before it trends — a 7-day window
-hides most open-weight releases. Widening the window is honest; back-dating
-those items to "today" would not be, and every card shows its real 발행 date
-either way.
+A story is in the window if **any of its sources** published inside it
+(`latestPublishedAt`), not only its first one. A Hugging Face model is dated
+from repo creation, routinely a week before the weights go public and HN
+notices — keyed on the first date, Qwen 3.8 27B (1,354 HN points) was
+missing from the default view while an opinion post about it was on it.
+Dedup refuses title merges across more than a 7-day gap, so this cannot
+resurrect month-old news; the card still shows the real first 발행 date.
+Cards whose newest source is less than 24h older than the snapshot carry a
+red **NEW** badge, so a daily reader can tell today's arrivals from the
+big stories still holding their rank from earlier in the week.
 
 Work is keyed on a SHA-1 of `title + summary` (digits stripped from the
 summary — HN, GitHub and Hugging Face summaries embed live counts, which
@@ -233,7 +251,13 @@ and GitHub's public search API works without one.
   that peaked earlier in the day (Qwen 3.8 27B at 1,354 points, on
   2026-08-15) — filtered by an AI keyword list that includes lab and model
   names (qwen, deepseek, kimi, glm, llama, grok …), since those headlines
-  often carry no generic AI word at all.
+  often carry no generic AI word at all. The submission is the page it links
+  to, so its publisher is taken from that host
+  (`publisherForUrl` in `src/adapters/sourceItem.js`: lab and vendor domains
+  are `company`, arxiv/.edu `research-org`, Reuters/Verge/Ars… `independent-
+  media`, everything else `community`). Before this every HN item was
+  `community`, so "Cursor launches Origin" (cursor.com) and a GPT price cut
+  on openrouter.ai ranked like forum posts, below opinion blogs.
 - **GitHub** (`src/adapters/github/index.js`): the public REST search API
   (`api.github.com/search/repositories`). GitHub has no official "trending"
   endpoint, so this approximates it: repos tagged `artificial-intelligence`
@@ -270,7 +294,9 @@ a plain-language rationale explaining the specific numbers behind it.
   publish*, converted to a percentile rank against other items on the same
   platform (not raw totals — this stops an old post from winning purely by
   having accumulated more reactions than a fast-rising new one), plus a
-  bonus (up to +20) for appearing on multiple platforms.
+  bonus (up to +20) for appearing on multiple platforms. Age is floored at
+  24 hours because collection is daily: with a 0.5h floor a 3-point thread
+  found 36 minutes after posting rated "5/hr", the 92nd percentile.
 - **Publisher influence**: a base score by publisher type (government 80,
   company 75, independent-media 70, research-org 65, community 35),
   adjusted by observed reach (GitHub stars or estimated reads) where
@@ -284,9 +310,10 @@ a plain-language rationale explaining the specific numbers behind it.
   80, Policy 80, Funding 65, Open Source 60, Products 55) blended with the
   story's engagement percentile within its platform, plus a small bonus for
   multi-platform coverage.
-- **Must-Know score**: a weighted blend of all four — viral ×0.3 +
-  influence ×0.15 + credibility ×0.3 + impact ×0.25 — so influence alone
-  cannot dominate the ranking.
+- **Must-Know score**: a weighted blend of all four — viral ×0.4 +
+  influence ×0.1 + credibility ×0.2 + impact ×0.3, plus a flat +10 when a
+  primary source (the org's own post, paper or release) is present — so
+  influence alone cannot dominate the ranking.
 
 Percentiles are always computed within the current collection batch (e.g.
 "this HN item's rate vs. every other HN item just collected"), not against
@@ -334,11 +361,16 @@ are not the same axis:
   (`src/processing/dedup.js`): items merge into one story if they share a
   URL, or if their titles share ≥2 tokens, clear an IDF-weighted Jaccard of
   0.32 (rare words carry the merge, batch-common ones like "cyber" or
-  "capabilities" barely count), and do not carry conflicting version numbers
-  (Gemini 3.5 vs 3.7 are two events). It can still under-merge genuine
-  same-event coverage that uses very different wording, and still over-merge
-  same-version siblings (DeepSeek-V4-Flash vs -Pro) or two unrelated
-  "security disclosure" posts.
+  "capabilities" barely count), do not carry conflicting version numbers
+  (Gemini 3.5 vs 3.7 are two events) or parameter sizes (27B vs 2.4T), and
+  were published within 7 days of each other (the same words four months
+  apart — DeepSeek-V4-Flash's April repo and the August V4-Pro post — are
+  two events, and fusing them dated the story April and hid it). It still
+  under-merges genuine same-event coverage that uses very different wording:
+  three outlets' takes on one 404 Media scoop ("rare books", "rare texts",
+  "hidden AirTag") stay three cards, and "watermarking" ≠ "watermarks". The
+  fix that would actually work is an event key assigned by the translator,
+  which already reads every article — not a lower threshold.
 - **Dispute detection is lexical, not a real claim-diff**: it looks for
   conflict-language patterns ("disputed", "denies", "fails to reproduce",
   etc.) between items, not an actual comparison of what each source claims.

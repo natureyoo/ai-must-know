@@ -44,12 +44,12 @@ const BATCH_SIZE = 6;
 // every stored item pending at once (~650 rows); doing them 120 a day, newest
 // first, means the landing page is redone on day one and nothing trips a
 // subscription rate limit. Normal days have far fewer than this pending.
-const DEFAULT_LIMIT = 120;
+const DEFAULT_LIMIT = 200;
 
 // Bump when SYSTEM_PROMPT changes in a way that should regenerate existing
 // Korean text. The hash covers it, so a bump re-translates everything once
 // (and only once) instead of leaving old output frozen in the DB forever.
-const PROMPT_VERSION = 6;
+const PROMPT_VERSION = 7;
 
 // Digits are stripped from the summary before hashing: HN, GitHub and Hugging
 // Face summaries embed live counts ("… with 979 points and 489 comments"), so
@@ -66,21 +66,34 @@ export function contentHash(item) {
 // had gistKo and summaryKo both paraphrasing the same sentence, so opening a
 // card told the reader nothing new. gistKo states the fact, summaryKo adds
 // the specifics, takeKo is the only place any interpretation is allowed.
-const SYSTEM_PROMPT = `You brief a Korean-speaking engineering audience on AI-industry news.
+const SYSTEM_PROMPT = `You write a Korean daily briefing on AI-industry news for working ML/AI engineers. They scan a grid of cards in three minutes: the headline and one gist line per card must carry the news by themselves. Write like a Korean tech desk (지디넷코리아, GeekNews), not like a translator.
 
 For each input item return:
-- titleKo: the headline in natural Korean. Keep product names, model names, company names, and version numbers in their original form (GPT-5.2, Claude, Kimi-K3, Hugging Face). Do not add words that are not in the original.
-- gistKo: ONE Korean sentence ending in 합니다/했습니다, 45-90 characters, dense with the actual news. It must answer "무엇이 어떻게 달라졌는가" and carry every concrete specific present in the input — the actor, the thing, and any number, model name, version, benchmark, price, or amount. A reader who reads ONLY this line should be able to say what happened.
-  BAD: "OpenAI가 새로운 결과를 발표했습니다" (no specifics)
-  BAD: "WeatherNext AI 모델이 사이클론 예측에서 돌파구를 달성했습니다" (restates the headline)
-  GOOD: "Google DeepMind이 사이클론 진로 예측에서 기존 수치예보보다 앞선 정확도를 냈다고 발표했습니다"
-- summaryKo: AT MOST 2 Korean sentences (about 150 characters), 합니다체, adding the detail gistKo had no room for — figures, scope, availability, what it is compared against. Never restate gistKo. If the input has nothing further to add, return the single most useful remaining detail.
-- takeKo: 2-4 Korean sentences and at most 300 characters in total, 합니다체, YOUR reading of why this matters, written from "articleText" — the body of the original piece. This is the only field where interpretation is allowed. It must do real work: say concretely what changes for someone building with or on this (a cost, a capability, a constraint, a default that flipped), what the article claims versus what it actually shows, and what to watch or doubt — and every claim must be anchored in something specific the article says (a figure, a design decision, a caveat the authors admit, what it is compared against, what is conspicuously missing). Name the missing thing when there is one: no code benchmark, no independent replication, no pricing, only a company blog as source. Never invent benchmarks, dates, figures, or events. Mark uncertainty as such ("~일 수 있습니다", "아직 확인되지 않았습니다"). If it is a routine release or a thin article, say so in one sentence and stop — do not inflate.
-  FORBIDDEN, because they carry no information: any sentence of the form "엔지니어들은 …을 주목해야 합니다 / 고려해야 합니다 / 평가해야 합니다", "…에 기여할 수 있습니다", "…중요한 단계입니다", "…추가적인 검증이 필요할 수 있습니다" without saying WHAT is unverified, "향후 발전이 주목됩니다", "…관건입니다", "…신호입니다", "…중요성을 보여줍니다", "…강조합니다". Do not restate the gist or the summary. Do not open with the product name plus "은/는".
-  BAD: "성능 향상 및 새로운 기능을 포함할 수 있습니다. 엔지니어들은 영향을 평가해야 합니다." (says nothing the headline did not)
-  BAD: "이 발표는 OpenAI가 사이버 보안에 대한 책임을 강화하고 있다는 신호입니다. 이러한 조치는 향후 AI 시스템의 안전성을 높이는 데 기여할 수 있습니다." (generic praise, zero anchors)
-  GOOD: "장문 컨텍스트 벤치마크만 공개하고 코드 생성 결과는 빠져 있어, 실제 코딩 작업 성능은 아직 판단하기 이릅니다. 가중치가 공개돼 자체 검증은 가능합니다."
-  GOOD: "Ultrafast는 별도 서비스 티어라 기본 API 호출은 그대로이고, 750 tok/s는 Cerebras 하드웨어 위에서만 나오는 수치입니다. 지연 시간이 병목인 에이전트 루프에서 의미가 크지만, 요금이 공개되지 않아 비용 대비 효과는 아직 계산할 수 없습니다."
+
+- titleKo: a Korean NEWS HEADLINE REWRITTEN from the facts — not a translation of the original title. 20-40 characters. Subject set off with a comma, noun ending ("공개", "출시", "인수", "제소", "50% 인하") or a short quote. If the original title is only a product name ("Grok 4.6", "Mistral OCR 4.1"), add the actor and the one fact that makes it news. Keep product/model/company names in their original Latin form (GPT-5.6, Claude, Qwen, Hugging Face); keep version numbers.
+  Never: a literal rendering of English syntax; endings in 하기/합니다/했다/에 관하여/~을 위한; HN/HF tails like "[pdf]", "[video]", " — <org>"; an English sentence left untranslated.
+  BAD: "수어 AI를 사용자 손에: Google DeepMind의 SL2T" (literal) → GOOD: "DeepMind, 수어→텍스트 모델 SL2T를 Pixel에 탑재"
+  BAD: "Sheets canvas로 스프레드시트 데이터를 살아 움직이게 하기" → GOOD: "Google Sheets, 프롬프트로 시트를 대시보드로 바꾸는 canvas 공개"
+  BAD: "AI 규제와 메시징에 관하여" → GOOD: "Dario Amodei \"규제=규제포획 도식은 틀렸다\"… SB 53 지지"
+  BAD: "GLM-5.3: 창발적 사이버 능력을 갖춘 프런티어 코딩" (restates the title, no news) → GOOD: "Z.ai, 코딩·공격형 보안 능력 앞세운 GLM-5.3 공개"
+  BAD: "Anthropic Risk August 2026 [pdf]" → GOOD: "Anthropic, 8월 리스크 리포트 PDF 공개"
+
+- gistKo: ONE sentence, 50-80 characters, newspaper 했다체 (공개했다/밝혔다/보도했다 — never 합니다체). Actor + what changed + the single most important specific (a number, model name, price, benchmark). A reader who reads ONLY this line knows what happened.
+  Never report Hacker News points/comments or Hugging Face downloads/likes — those are not news. Never say a page/document/model "was published/posted" as the news; state what it says or does. Never restate the headline. If articleText is empty, state only what the title itself asserts, and no more.
+  BAD: "Claude의 시스템 프롬프트를 공개한 페이지가 Hacker News에서 417포인트와 댓글 182개를 기록했다"
+  BAD: "OpenAI가 새로운 결과를 발표했다" (no specifics)
+  GOOD: "OpenRouter가 GPT-5.6 Sol 단가를 50% 내렸다. 적용 범위와 기간은 미확인이다"
+  GOOD: "Google DeepMind가 사이클론 진로 예측에서 기존 수치예보보다 앞선 정확도를 냈다고 밝혔다"
+
+- summaryKo: at most 2 sentences, 120 characters or fewer, 했다체. Only what the gist had no room for — figures, scope, availability, conditions, what it is compared against. Never restate gistKo. If nothing remains, give the single most useful remaining detail.
+
+- takeKo: 2-3 sentences, 250 characters or fewer, 했다체, declarative. YOUR reading of why this matters, written from "articleText" (the original page). This is the only field where interpretation is allowed, and it must do real work: first sentence says what concretely changes for someone building with or on this (a cost, a capability, a constraint, a default that flipped); then what the article claims versus what it actually shows; then what to doubt or watch. Every claim must be anchored in something specific the article says — a figure, a design decision, a caveat the authors admit, what it is compared against, what is conspicuously missing (no code benchmark, no independent replication, no pricing, only a company blog as source). Never invent benchmarks, dates, figures, or events. Mark uncertainty as such. If it is a routine release or a thin article, say so in one sentence and stop — do not inflate.
+  If articleText is EMPTY, write exactly ONE sentence: what the title asserts and that the original was not retrievable, e.g. "원문을 확보하지 못해 제목 외 판단 근거가 없다." — and stop. Do not pad with things you do not know.
+  FORBIDDEN, because they carry no information: any sentence of the form "엔지니어들은 …을 주목/고려/평가해야 한다", "…에 기여할 수 있다", "…중요한 단계/기회/역할", "…추가 검증이 필요하다" without saying WHAT is unverified, "향후 발전이 주목된다", "…관건이다", "…신호다", "…중요성을 보여준다/강조한다", "…시사한다", "잠재력". Do not restate the gist or the summary. Do not open with the product name plus "은/는".
+  BAD: "성능 향상 및 새로운 기능을 포함할 수 있다. 엔지니어들은 영향을 평가해야 한다." (says nothing the headline did not)
+  BAD: "이 발표는 OpenAI가 사이버 보안에 대한 책임을 강화하고 있다는 신호다. 이러한 조치는 향후 AI 시스템의 안전성을 높이는 데 기여할 수 있다." (generic praise, zero anchors)
+  GOOD: "장문 컨텍스트 벤치마크만 공개하고 코드 생성 결과는 빠져 있어, 실제 코딩 작업 성능은 아직 판단하기 이르다. 가중치가 공개돼 자체 검증은 가능하다."
+  GOOD: "Ultrafast는 별도 서비스 티어라 기본 API 호출은 그대로이고, 750 tok/s는 Cerebras 하드웨어 위에서만 나오는 수치다. 지연 시간이 병목인 에이전트 루프에서 의미가 크지만, 요금이 공개되지 않아 비용 대비 효과는 아직 계산할 수 없다."
 
 - category: EXACTLY ONE of research | models | products | open-source | infrastructure | business | policy | funding | safety. Work down this list and take the FIRST that fits, so an item that touches several lands in one place consistently:
   1. safety — model risk, misuse, alignment, jailbreaks, red-teaming, a security incident or breach, safety evaluations
@@ -94,7 +107,9 @@ For each input item return:
   9. products — an end-user product, feature, or app
   A reinforcement-learning "policy" is research, not policy. A repository being on GitHub does not make it open-source news.
 
-Each item includes "articleText": the original page reduced to plain text. It may be empty (paywall, JS-only page, fetch failure) — in that case write takeKo from the title and summary alone and keep it correspondingly modest. When it is present it is the best evidence you have; prefer it over the summary, but never contradict the title/summary.
+Terms and style, all fields: company/model/product names in their original Latin form (OpenAI, Claude, Qwen, Hugging Face — never 구글/아마존/앤스로픽); person names in Latin script; 프런티어 (not 프론티어), 오픈소스, 오픈웨이트, 프리뷰, 됐다 (not 되었다); "·" for lists (모델·툴·샌드박스); thousands separators in numbers (2,150개, 1억 1,300만 달러, 70억 달러).
+
+Each item includes "articleText": the original page reduced to plain text. It may be empty (paywall, JS-only page, fetch failure). When present it is the best evidence you have; prefer it over the summary, but never contradict the title/summary.
 
 Every field except takeKo is reporting: never add facts, figures, or judgements absent from the input.
 
@@ -105,15 +120,24 @@ const FIELDS = ['titleKo', 'gistKo', 'summaryKo', 'takeKo'];
 // The prompt bans these; this makes the ban enforced rather than advisory.
 // A rejected row is simply not stored, so the item stays pending and is
 // retried on the next run — no extra cost, no filler on the page.
-const TAKE_FILLER = /주목해야 합니다|고려해야 합니다|평가해야 합니다|기여할 수 있습니다|중요한 단계입니다|향후 발전이 주목됩니다|중요성을 보여줍니다|관건입니다/;
+const TAKE_FILLER = /주목해야 (합니다|한다)|고려해야 (합니다|한다)|평가해야 (합니다|한다)|기여할 수 (있습니다|있다)|중요한 (단계|기회|역할)|향후 발전이 주목|중요성을 보여|관건(입니다|이다)|시사(합니다|한다)|잠재력|엔지니어들은/;
+// A headline that is still the English title with an HN/HF tail, or English
+// syntax rendered word for word ("…하기", "…에 관하여"), or 합니다체.
+const TITLE_BAD = /\[pdf\]|\[video\]| — |(하기|에 관하여|합니다|니다)$/;
+// A gist that reports the platform's counters instead of the news.
+const GIST_BAD = /Hacker News|Show HN|HN에서|[\d,]+ ?포인트|댓글 ?[\d,]+|[\d,]+ ?개의 댓글|다운로드 [\d,]+|[\d,]+ ?회의 다운로드|좋아요 [\d,]+|[\d,]+ ?개의 좋아요/;
 
-function validRow(entry, allowedIds) {
+function validRow(entry, allowedIds, thinIds = new Set()) {
   return (
     entry &&
     allowedIds.has(entry.id) &&
     FIELDS.every((k) => typeof entry[k] === 'string' && entry[k].trim() !== '') &&
-    entry.takeKo.trim().length >= 60 &&
-    !TAKE_FILLER.test(entry.takeKo)
+    // With no article text the take is one honest sentence; with it, one
+    // short sentence means the model did not do the work.
+    entry.takeKo.trim().length >= (thinIds.has(entry.id) ? 15 : 60) &&
+    !TAKE_FILLER.test(entry.takeKo) &&
+    !TITLE_BAD.test(entry.titleKo.trim()) &&
+    !GIST_BAD.test(entry.gistKo)
   );
 }
 
@@ -203,11 +227,12 @@ async function translateBatch(batch, { ask, articleText }) {
   }));
   const parsed = await ask(JSON.stringify({ items: payload }));
   const allowedIds = new Set(batch.map((i) => i.id));
+  const thinIds = new Set(payload.filter((p) => !p.articleText).map((p) => p.id));
   const byId = new Map(batch.map((i) => [i.id, i]));
   const translatedAt = new Date().toISOString();
 
   return (parsed.items ?? [])
-    .filter((entry) => validRow(entry, allowedIds))
+    .filter((entry) => validRow(entry, allowedIds, thinIds))
     .map((entry) => ({
       id: entry.id,
       hash: contentHash(byId.get(entry.id)),

@@ -28,7 +28,7 @@ function idFor(url) {
 // Algolia indexes the submitted URL verbatim; restricting the searchable
 // attribute to `url` keeps a title-word match from returning an unrelated
 // submission.
-async function lookupOne(fetchImpl, url, timeoutMs) {
+async function lookupOne(fetchImpl, url, timeoutMs, minPoints) {
   const query = `${ALGOLIA_URL}?query=${encodeURIComponent(url)}&restrictSearchableAttributes=url&hitsPerPage=5`;
   let payload;
   try {
@@ -44,7 +44,11 @@ async function lookupOne(fetchImpl, url, timeoutMs) {
   // one we asked about (ignoring a trailing slash), then take the most
   // discussed submission — reposts of the same link are common.
   const norm = (u) => (u ?? '').replace(/\/+$/, '');
-  const exact = hits.filter((h) => norm(h.url) === norm(url) && (h.points ?? 0) > 0);
+  // A 3-point thread is not a signal, but with 120 of them in the pool a
+  // 70-point discussion rated the 90th percentile and a lab blog post with
+  // that thread outranked a 1,354-point release. Below the floor the post
+  // simply has no HN engagement, which is the truth.
+  const exact = hits.filter((h) => norm(h.url) === norm(url) && (h.points ?? 0) >= minPoints);
   if (exact.length === 0) return null;
   return exact.reduce((a, b) => ((b.points ?? 0) > (a.points ?? 0) ? b : a));
 }
@@ -55,13 +59,14 @@ export async function fetchHnDiscussions({
   now = new Date(),
   timeoutMs = 8000,
   concurrency = 6,
+  minPoints = 20,
 } = {}) {
   const unique = [...new Set(urls)];
   const items = [];
 
   for (let i = 0; i < unique.length; i += concurrency) {
     const batch = unique.slice(i, i + concurrency);
-    const hits = await Promise.all(batch.map((url) => lookupOne(fetchImpl, url, timeoutMs)));
+    const hits = await Promise.all(batch.map((url) => lookupOne(fetchImpl, url, timeoutMs, minPoints)));
 
     for (const [j, hit] of hits.entries()) {
       if (!hit) continue;

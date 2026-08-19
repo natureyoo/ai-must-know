@@ -189,7 +189,9 @@ test('fetchGithubItems skips a malformed repo entry but keeps the rest of the ba
   const payload = {
     items: [
       { id: 1, full_name: null, html_url: null, stargazers_count: 5 }, // missing required fields -> invalid url/title
-      { id: 2, full_name: 'ok/repo', html_url: 'https://github.com/ok/repo', description: 'fine', stargazers_count: 10, forks_count: 1, open_issues_count: 0, pushed_at: '2026-08-05T00:00:00Z' },
+      { id: 2, full_name: 'ok/repo', html_url: 'https://github.com/ok/repo', description: 'fine', stargazers_count: 10, forks_count: 6, open_issues_count: 0, pushed_at: '2026-08-05T00:00:00Z' },
+      // A star farm: 116 stars, no forks. Skipped, not news.
+      { id: 3, full_name: 'x/ai-object-remover-2026', html_url: 'https://github.com/x/ai-object-remover-2026', description: 'Erase Distractions & Keep HD Quality', stargazers_count: 116, forks_count: 0, open_issues_count: 0, pushed_at: '2026-08-05T00:00:00Z' },
     ],
   };
   const fetchImpl = async () => ({ ok: true, status: 200, json: async () => payload });

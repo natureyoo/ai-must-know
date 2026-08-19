@@ -33,6 +33,10 @@ export function localized(view, lang = 'ko') {
   const summary = (ko && view.summaryKo) || view.summary;
   return {
     title,
+    // The English original under a Korean headline: product names and
+    // phrasing an engineer already knows, and a fallback when the rewrite
+    // reads oddly. Empty when there is no translation or it is unchanged.
+    originalTitle: ko && view.titleKo && !sameText(view.titleKo, view.title) ? view.title : '',
     // Feeds that ship no description leave summary === title; repeating the
     // headline underneath itself wastes the line a reader scans first.
     summary: sameText(summary, title) ? '' : summary,
@@ -61,12 +65,21 @@ export function cardBrief(text) {
 // Viral score rewards accumulated engagement, so a story from two weeks ago
 // can still outrank today's. That is correct for "what is big" and wrong for
 // "what is new", hence a recency window on top of the ranking rather than a
-// change to it. Filters on when the story broke (firstPublishedAt), not on
-// its most recent repost.
+// change to it. A story is in the window if any of its sources published in
+// it: a Hugging Face repo is dated from creation, routinely a week before the
+// weights go public and HN notices, and keying on firstPublishedAt hid Qwen
+// 3.8 27B — the week's biggest release — from the default view. Dedup caps a
+// title merge at a 7-day gap, so this cannot resurrect month-old news.
 export function withinDays(stories, days, now = new Date()) {
   if (!days) return stories;
   const cutoff = now.getTime() - days * 24 * 3600 * 1000;
-  return stories.filter((s) => Date.parse(s.firstPublishedAt ?? s.latestPublishedAt) >= cutoff);
+  return stories.filter((s) => Date.parse(s.latestPublishedAt ?? s.firstPublishedAt) >= cutoff);
+}
+
+// "New" = something about it appeared since roughly the previous daily run,
+// measured against the snapshot's own as-of time, not the viewer's clock.
+export function isNew(story, dataAsOf, hours = 24) {
+  return Date.parse(dataAsOf) - Date.parse(story.latestPublishedAt ?? story.firstPublishedAt) < hours * 3600 * 1000;
 }
 
 export function localizedRationale(score, lang = 'ko') {

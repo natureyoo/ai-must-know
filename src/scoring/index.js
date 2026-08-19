@@ -56,18 +56,20 @@ function clamp(n, lo = 0, hi = 100) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-// Floor of 0.5h avoids a reactions-per-hour blowup for items published
-// seconds ago, and stands in for a real growth-rate signal: without
-// repeated collection snapshots we can't observe an actual delta, so
-// total-reactions-over-age is the best available proxy for "how fast is
-// this accumulating" — an old post with many stale reactions gets a low
-// rate, a new fast-rising one gets a high rate, which is what item 9 needs.
+// Floor of 24h: collection runs once a day, so anything younger is measured
+// as if a day old. The old 0.5h floor turned a 3-point HN thread found 36
+// minutes after posting into "5/hr" — the 92nd percentile — and put it in
+// the top ten above 700-point releases. This stands in for a real
+// growth-rate signal: without repeated collection snapshots we can't observe
+// an actual delta, so total-reactions-over-age is the best available proxy
+// for "how fast is this accumulating" — an old post with many stale
+// reactions gets a low rate, a new fast-rising one gets a high rate.
 //
 // ponytail: single-snapshot rate proxy, not a real time-series growth
 // rate — upgrade to delta-between-collections once collect.js runs on a
 // schedule and stores historical reaction counts.
 function ageHours(item, now) {
-  return Math.max(0.5, (now.getTime() - Date.parse(item.publishedAt)) / HOUR_MS);
+  return Math.max(24, (now.getTime() - Date.parse(item.publishedAt)) / HOUR_MS);
 }
 
 function reactionMagnitude(item) {

@@ -154,7 +154,12 @@ const SNAPSHOT = [
   ['daybreak', 'Expanding Daybreak as the Cyber Defense Window Narrows', 'https://openai.com/index/daybreak'],
   ['daybreak-hn', 'GPT 5.6 Cyber', 'https://openai.com/index/daybreak'],
   ['gpt56-guide', 'The builder’s guide to GPT-5.6', 'https://openai.com/index/gpt-5-6-guide'],
-].map(([id, title, url], i) => ({ id, title, url, publishedAt: `2026-08-0${(i % 9) + 1}T00:00:00Z` }));
+  ['qwen-24t', 'Qwen3.8-2.4T-A95B-FP8 — Qwen (Alibaba)', 'https://huggingface.co/Qwen/Qwen3.8-2.4T-A95B-FP8'],
+  ['qwen-27b-fp8', 'Qwen3.8-27B-FP8 — Qwen (Alibaba)', 'https://huggingface.co/Qwen/Qwen3.8-27B-FP8'],
+  // Same words as the DeepSeek Flash repo, four months later: another event.
+  ['ds-flash-apr', 'DeepSeek-V4-Flash — DeepSeek', 'https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash', '2026-04-22T00:00:00Z'],
+  ['ds-flash-aug', 'DeepSeek-V4-Flash-0813 — DeepSeek', 'https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0813', '2026-08-13T00:00:00Z'],
+].map(([id, title, url, publishedAt]) => ({ id, title, url, publishedAt: publishedAt ?? '2026-08-01T00:00:00Z' }));
 
 describe('buildStories on real mis-grouped headlines', () => {
   const stories = buildStories(SNAPSHOT);
@@ -190,6 +195,15 @@ describe('buildStories on real mis-grouped headlines', () => {
   test('one shared token is never a merge', () => {
     assert.ok(!together('glm-52', 'ai-by-hand'));
     assert.ok(!together('daybreak-hn', 'gpt56-guide'));
+  });
+
+  test('parameter sizes are discriminators: 27B and 2.4T are two releases', () => {
+    assert.ok(!together('hf-qwen', 'qwen-24t'));
+    assert.ok(together('hf-qwen', 'qwen-27b-fp8'));
+  });
+
+  test('title merges need publish dates within a week', () => {
+    assert.ok(!together('ds-flash-apr', 'ds-flash-aug'));
   });
 
   test('three outlets reporting the Twitch/Amazon opt-out are one story', () => {

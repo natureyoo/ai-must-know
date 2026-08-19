@@ -45,6 +45,10 @@ export async function fetchGithubItems({
   const repos = Array.isArray(payload?.items) ? payload.items : [];
   const items = [];
   for (const repo of repos) {
+    // Star farms: "AI Object Remover 2026 – Erase Distractions & Keep HD
+    // Quality" with 116 stars, 0 forks, 0 issues, created this week — six of
+    // them a day, all with the same star count. Real momentum has forks.
+    if ((repo.forks_count ?? 0) < 5) continue;
     try {
       const item = {
         id: idFor(repo.id),

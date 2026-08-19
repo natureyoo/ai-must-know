@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { firstSentences, topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, relativeAge, isStale, askPrompt, ASK_TARGETS } from '../public/logic.js';
+import { firstSentences, topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, isNew, relativeAge, isStale, askPrompt, ASK_TARGETS } from '../public/logic.js';
 import { getFixtureItems } from '../src/adapters/fixtures/index.js';
 
 const VIEW = {
@@ -157,10 +157,16 @@ test('the recency window keeps what broke inside it and drops what did not', () 
   assert.deepEqual(withinDays(stories, 0, now).map((s) => s.id), ['today', 'six-days', 'twelve-days'], 'no window = no filtering');
 });
 
-test('the window uses when the story broke, not a later repost of it', () => {
+test('the window keeps a story whose weights went public this week even if its repo was created earlier', () => {
   const now = new Date('2026-08-10T00:00:00.000Z');
-  const revived = [{ id: 'old-story', firstPublishedAt: '2026-07-20T00:00:00.000Z', latestPublishedAt: '2026-08-09T00:00:00.000Z' }];
-  assert.deepEqual(withinDays(revived, 7, now), [], 'a fresh repost must not resurrect three-week-old news');
+  const hf = [{ id: 'qwen', firstPublishedAt: '2026-08-01T00:00:00.000Z', latestPublishedAt: '2026-08-09T00:00:00.000Z' }];
+  assert.deepEqual(withinDays(hf, 7, now).map((s) => s.id), ['qwen']);
+});
+
+test('isNew marks stories with activity in the 24h before the snapshot', () => {
+  const asOf = '2026-08-10T00:00:00.000Z';
+  assert.equal(isNew({ latestPublishedAt: '2026-08-09T06:00:00.000Z' }, asOf), true);
+  assert.equal(isNew({ latestPublishedAt: '2026-08-08T06:00:00.000Z' }, asOf), false);
 });
 
 test('askPrompt hands the AI the headline, the gist and the source URL, and fits in a URL', () => {

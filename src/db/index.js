@@ -5,6 +5,7 @@
 // instead of inserting a second row.
 
 import { DatabaseSync } from 'node:sqlite';
+import { publisherForUrl } from '../adapters/sourceItem.js';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -49,6 +50,23 @@ function migrate(db) {
     const existing = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
     if (!existing.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${spec}`);
   }
+  // HN rows collected before the adapter took the publisher from the linked
+  // host are all `community`/"Hacker News". The adapter only re-fetches the
+  // last 36h, so without this the cached DB would rank last week's
+  // cursor.com / openrouter.ai submissions as forum posts for months.
+  // Idempotent: a fixed row no longer matches the WHERE.
+  const stale = db
+    .prepare(`SELECT id, url FROM source_items WHERE sourceType = 'hn' AND id NOT LIKE 'hn-discussion-%' AND source = 'Hacker News' AND publisherType = 'community'`)
+    .all();
+  const fix = db.prepare(`UPDATE source_items SET source = ?, publisherType = ? WHERE id = ?`);
+  for (const { id, url } of stale) {
+    const { host, publisherType } = publisherForUrl(url);
+    if (publisherType !== 'community') fix.run(host, publisherType, id);
+  }
+  // Backfill discussions below the adapter's current floor (see
+  // src/adapters/hackernews/discussions.js): upsert never deletes, so the
+  // cached DB would keep feeding 3-point threads into the viral percentile.
+  db.exec(`DELETE FROM source_items WHERE id LIKE 'hn-discussion-%' AND json_extract(reactions, '$.points') < 20`);
 }
 
 // Opens (creating if needed) the sqlite file at `path` and ensures the

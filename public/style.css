@@ -191,6 +191,7 @@ select {
   font-size: 1.05rem;
   line-height: 1.35;
 }
+.card-original-title { margin: -4px 0 0; color: var(--text-muted); font-size: 0.8rem; line-height: 1.35; }
 .card-title a { color: var(--text); text-decoration: none; }
 .card-title a:hover { color: var(--accent); }
 
@@ -222,6 +223,8 @@ select {
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
+.badge-new { background: #dc262620; color: #dc2626; }
+[data-theme="dark"] .badge-new { color: #f87171; }
 .badge-verified { background: #17663620; color: #1b8a4a; }
 [data-theme="dark"] .badge-verified { color: #4ade80; }
 .badge-official-claim { background: #1d4ed820; color: #2563eb; }
@@ -253,22 +256,6 @@ select {
 }
 .tag-category { font-weight: 700; color: var(--text); }
 .tag-untranslated { font-style: italic; }
-
-/* The four axes as compact labelled numbers. Bars were replaced by numbers
-   so the card reads in one pass; the reasoning behind each number lives in
-   the collapsed rationale below and in full on the detail view. */
-.score-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-.pill {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  background: var(--surface-alt);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 0.74rem;
-}
-.pill-label { color: var(--text-muted); }
-.pill-value { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 details.rationale { font-size: 0.72rem; color: var(--text-muted); }
 details.rationale summary { cursor: pointer; color: var(--accent); }

@@ -31,6 +31,40 @@ export const PUBLISHER_TYPES = [
   'government',
 ];
 
+// Who is behind an outbound link, by hostname suffix. HN submissions used to
+// be tagged `community` whatever they linked to, so "Cursor launches Origin"
+// (cursor.com, 324 points) and a GPT price cut on openrouter.ai ranked like
+// forum posts — influence 35, credibility 20 — while any lab blog got 75/45.
+// Unlisted hosts stay community: personal blogs, Substack, GitHub repos.
+const PUBLISHER_HOSTS = [
+  [['openai.com', 'anthropic.com', 'claude.com', 'x.ai', 'ai.meta.com', 'mistral.ai', 'deepseek.com', 'qwen.ai',
+    'moonshot.ai', 'z.ai', 'minimax.io', 'deepmind.google', 'blog.google', 'ai.google.dev', 'microsoft.com',
+    'github.blog', 'huggingface.co', 'nvidia.com', 'cursor.com', 'openrouter.ai', 'cerebras.ai', 'groq.com',
+    'together.ai', 'cohere.com', 'perplexity.ai', 'apple.com', 'amazon.com', 'cloudflare.com', 'stripe.com',
+    'vercel.com', 'modal.com', 'replicate.com'], 'company'],
+  [['arxiv.org', 'openreview.net', 'allenai.org', 'research.google', '.edu', '.ac.uk', '.ac.kr'], 'research-org'],
+  [['reuters.com', 'bloomberg.com', 'theverge.com', 'arstechnica.com', 'techcrunch.com', 'venturebeat.com',
+    'wired.com', 'nytimes.com', 'wsj.com', 'ft.com', 'theinformation.com', '404media.co', 'the-decoder.com',
+    'marktechpost.com', 'technologyreview.com', 'theregister.com', 'semianalysis.com', 'cnbc.com',
+    'theguardian.com', 'washingtonpost.com', 'axios.com', 'bbc.com', 'bbc.co.uk'], 'independent-media'],
+  [['.gov', '.gov.uk', '.go.kr', 'europa.eu'], 'government'],
+];
+
+export function publisherForUrl(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return { host: null, publisherType: 'community' };
+  }
+  for (const [hosts, publisherType] of PUBLISHER_HOSTS) {
+    for (const h of hosts) {
+      if (host === h || host.endsWith(h.startsWith('.') ? h : `.${h}`)) return { host, publisherType };
+    }
+  }
+  return { host, publisherType: 'community' };
+}
+
 const REQUIRED_STRING_FIELDS = [
   'id',
   'sourceType',
