@@ -3,7 +3,7 @@
 // fixtures on failure (src/collect), and persists the result to the local
 // database (src/db).
 
-import { openDb, pruneOldItems } from '../src/db/index.js';
+import { openDb, pruneOldItems, getAllSourceItems } from '../src/db/index.js';
 import { collectItems, persistItems } from '../src/collect/index.js';
 import { translateItems } from '../src/translate/index.js';
 
@@ -24,7 +24,12 @@ try {
   if (pruned > 0) console.log(`Retention: removed ${pruned} item(s) published before ${cutoff.toISOString().slice(0, 10)}.`);
   // Korean text is produced here, not at request time — see src/translate.
   // Only new/changed items cost anything, and no key means English-only.
-  await translateItems(db, items);
+  // Over the whole DB, not just this run's collection: HN items older than
+  // the adapter's 36h window live only in the DB, and passing `items` here
+  // meant a prompt-version bump never reached them — the landing page kept
+  // showing last month's phrasing on exactly the cards that were still
+  // ranking.
+  await translateItems(db, getAllSourceItems(db));
 } finally {
   db.close();
 }
