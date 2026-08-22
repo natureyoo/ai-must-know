@@ -157,6 +157,9 @@ test('the recency window keeps what broke inside it and drops what did not', () 
   assert.deepEqual(withinDays(stories, 0, now).map((s) => s.id), ['today', 'six-days', 'twelve-days'], 'no window = no filtering');
 });
 
+// What counts as the story's latest activity is decided in buildStoryView
+// (see server.test.js: a Hugging Face re-upload must not refresh it). Here
+// that date is given directly — this only pins that the window honours it.
 test('the window keeps a story whose weights went public this week even if its repo was created earlier', () => {
   const now = new Date('2026-08-10T00:00:00.000Z');
   const hf = [{ id: 'qwen', firstPublishedAt: '2026-08-01T00:00:00.000Z', latestPublishedAt: '2026-08-09T00:00:00.000Z' }];
