@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb, upsertSourceItems } from '../src/db/index.js';
 import { getFixtureItems } from '../src/adapters/fixtures/index.js';
-import { getStoryViews, sortStoryViews, filterByCategory, handleRequest } from '../src/server/index.js';
+import { getStoryViews, sortStoryViews, filterByCategory, handleRequest, buildStoryView } from '../src/server/index.js';
 
 function seededDb() {
   const db = openDb(':memory:');
@@ -143,4 +143,53 @@ test('GET /api/stories/:id returns 404 for an unknown id', () => {
   handleRequest({ method: 'GET', url: '/api/stories/does-not-exist' }, res, db);
   db.close();
   assert.equal(res.statusCode, 404);
+});
+
+// Regression: the 최근 7일 tab filters on latestPublishedAt, and Hugging Face
+// community re-uploads (GGUF quants, "abliterated" forks) keep arriving for
+// weeks after a model ships. One of them held Qwen 3.8 27B at #1 of that tab
+// nine days after release, with the card still reading "9일 전".
+function hfItem(id, owner, publisherType, publishedAt) {
+  return {
+    id,
+    source: owner,
+    sourceType: 'hf',
+    publisherType,
+    url: `https://huggingface.co/${owner}/model`,
+    title: `Model — ${owner}`,
+    summary: '',
+    publishedAt,
+    collectedAt: publishedAt,
+    reactions: {},
+  };
+}
+
+const NO_SCORES = { verification: { status: 'official-claim' }, scores: {} };
+
+test('a community re-upload does not refresh a story it was merged into', () => {
+  const items = [
+    hfItem('a', 'Qwen', 'company', '2026-08-13T00:00:00.000Z'),
+    hfItem('b', 'unsloth', 'community', '2026-08-19T00:00:00.000Z'),
+  ];
+  const view = buildStoryView({ id: 's', title: items[0].title, items }, NO_SCORES);
+
+  assert.equal(view.firstPublishedAt, '2026-08-13T00:00:00.000Z');
+  assert.equal(view.latestPublishedAt, '2026-08-13T00:00:00.000Z', 're-upload must not count as coverage');
+});
+
+test('a community upload that is the whole story keeps its own date', () => {
+  const items = [hfItem('a', 'unsloth', 'community', '2026-08-19T00:00:00.000Z')];
+  const view = buildStoryView({ id: 's', title: items[0].title, items }, NO_SCORES);
+
+  assert.equal(view.latestPublishedAt, '2026-08-19T00:00:00.000Z');
+});
+
+test('real follow-up coverage still refreshes the story', () => {
+  const items = [
+    hfItem('a', 'DeepSeek', 'company', '2026-08-13T00:00:00.000Z'),
+    { ...hfItem('b', 'MarkTechPost', 'independent-media', '2026-08-17T00:00:00.000Z'), sourceType: 'rss' },
+  ];
+  const view = buildStoryView({ id: 's', title: items[0].title, items }, NO_SCORES);
+
+  assert.equal(view.latestPublishedAt, '2026-08-17T00:00:00.000Z');
 });

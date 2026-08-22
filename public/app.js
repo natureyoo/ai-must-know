@@ -43,6 +43,7 @@ const STRINGS = {
     takeToggle: 'AI 관점 · 왜 중요한가',
     takeDisclaimer: '이 항목은 원문을 바탕으로 AI가 작성한 해석입니다. 사실 확인은 원문·근거 링크를 확인하세요.',
     published: (date, ago) => `발행 ${date} · ${ago}`,
+    publishedUpdated: (date, ago) => `발행 ${date} · 후속 소식 ${ago}`,
     whyScore: '왜 이 점수인가 · 검증 근거',
     whyVerification: '검증 판단 이유',
     newBadge: 'NEW',
@@ -99,6 +100,7 @@ const STRINGS = {
     takeToggle: 'AI take · why it matters',
     takeDisclaimer: 'Written by AI from the original. Check the source and evidence links before relying on it.',
     published: (date, ago) => `Published ${date} · ${ago}`,
+    publishedUpdated: (date, ago) => `Published ${date} · covered again ${ago}`,
     whyScore: 'Why this score · verification',
     whyVerification: 'Why this verification status?',
     newBadge: 'NEW',
@@ -180,13 +182,28 @@ function formatKst(iso) {
 
 // When the story broke, in KST like the as-of stamp, plus how long ago —
 // "8월 8일" alone does not tell a reader whether that is old news.
-function publishedLine(iso) {
+//
+// The window filters on latestPublishedAt, so a story that broke nine days
+// ago and was still being covered four days ago belongs in the 최근 7일 tab
+// — but a card there reading only "9일 전" reads as a bug. When the two
+// dates are more than a day apart, the relative age is the age of the latest
+// coverage and the label says so; the original date stays visible, because a
+// follow-up must not make old news read as published today.
+const UPDATED_GAP_MS = 24 * 3600 * 1000;
+
+function publishedLine(view) {
+  const iso = view.firstPublishedAt;
   const date = new Date(iso).toLocaleDateString(state.lang === 'ko' ? 'ko-KR' : 'en-US', {
     timeZone: 'Asia/Seoul',
     month: 'long',
     day: 'numeric',
   });
-  return t().published(date, relativeAge(iso, new Date(), state.lang));
+  const now = new Date();
+  const latest = view.latestPublishedAt;
+  if (latest && Date.parse(latest) - Date.parse(iso) > UPDATED_GAP_MS) {
+    return t().publishedUpdated(date, relativeAge(latest, now, state.lang));
+  }
+  return t().published(date, relativeAge(iso, now, state.lang));
 }
 
 function categoryLabel(category) {
@@ -274,7 +291,7 @@ function renderCard(view) {
       </div>
       <h2 class="card-title"><a href="#/story/${encodeURIComponent(view.id)}">${escapeHtml(text.title)}</a></h2>
       ${text.originalTitle ? `<p class="card-original-title">${escapeHtml(text.originalTitle)}</p>` : ''}
-      <p class="card-date">${escapeHtml(publishedLine(view.firstPublishedAt))}</p>
+      <p class="card-date">${escapeHtml(publishedLine(view))}</p>
       ${lead ? `<p class="card-gist">${escapeHtml(lead)}</p>` : ''}
       ${takeOrBrief(view, brief)}
       <details class="rationale">
@@ -386,7 +403,7 @@ async function renderDetail(id) {
         <span class="${badgeClass(view.verification.status)}">${escapeHtml(text.verificationLabel)}</span>
         <h1>${escapeHtml(text.title)}</h1>
         ${text.originalTitle ? `<p class="card-original-title">${escapeHtml(text.originalTitle)}</p>` : ''}
-        <p class="card-date">${escapeHtml(publishedLine(view.firstPublishedAt))}</p>
+        <p class="card-date">${escapeHtml(publishedLine(view))}</p>
         ${text.gist ? `<p class="card-gist">${escapeHtml(text.gist)}</p>` : ''}
         ${text.summary ? `<p class="card-summary">${escapeHtml(text.summary)}</p>` : ''}
         <p class="verification-reason">${escapeHtml(text.verificationReason)} (${escapeHtml(t().independentSources(view.verification.independentSourceCount))})</p>
