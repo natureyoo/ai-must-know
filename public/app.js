@@ -11,7 +11,7 @@
 import { topStories, localized, localizedRationale, cardLead, cardBrief, withinDays, isNew, relativeAge, isStale, askPrompt, ASK_TARGETS } from './logic.js';
 
 const CATEGORIES = ['models', 'research', 'products', 'open-source', 'infrastructure', 'business', 'policy', 'funding', 'safety'];
-const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', hf: 'Hugging Face', fixture: 'Fixture' };
+const PLATFORM_LABELS = { rss: 'RSS', hn: 'Hacker News', github: 'GitHub', hf: 'Hugging Face', papers: 'arXiv', fixture: 'Fixture' };
 
 // One ranking, spelled out. The API still accepts ?sort=viral|credibility|
 // impact|recent (src/server), but four opaque sort options on screen raised
@@ -25,7 +25,7 @@ const STRINGS = {
     homeTitle: (period) => `${period} Must Know`,
     homeTitleFiltered: (cat, period) => `${cat} · ${period} Must Know`,
     loading: '불러오는 중...',
-    storyCount: (n, period) => `${n}개 스토리 · ${period} · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스)`,
+    storyCount: (n, period) => `${n}개 스토리 · ${period} · Must Know 점수 순 = 화제성 40% + 산업 중요도 30% + 신뢰도 20% + 발행처 영향력 10% (+1차 출처 보너스, +최신성 최대 8점)`,
     periodChip: (days) => (days ? `최근 ${days}일` : '전체 기간'),
     periodTitle: (days) => (days ? `최근 ${days}일` : '전체 기간'),
     periodNote: (days) => (days ? `최근 ${days}일 소식` : '전체 기간'),
@@ -82,7 +82,7 @@ const STRINGS = {
     homeTitle: (period) => `Must Know · ${period}`,
     homeTitleFiltered: (cat, period) => `${cat} · Must Know · ${period}`,
     loading: 'Loading...',
-    storyCount: (n, period) => `${n} stories · ${period} · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus)`,
+    storyCount: (n, period) => `${n} stories · ${period} · ranked by Must Know = viral 40% + industry impact 30% + credibility 20% + publisher influence 10% (+primary-source bonus, +up to 8 for recency)`,
     periodChip: (days) => (days ? `Last ${days} days` : 'All time'),
     periodTitle: (days) => (days ? `last ${days} days` : 'all time'),
     periodNote: (days) => (days ? `active in the last ${days} days` : 'all time'),
@@ -207,7 +207,15 @@ function publishedLine(view) {
 }
 
 function categoryLabel(category) {
-  return t().categories[category] || category || 'uncategorized';
+  return t().categories[category] || category || '';
+}
+
+// An item still awaiting translation has no category yet (src/translate is
+// what assigns it), and an empty chip reading "uncategorized" in the middle
+// of a Korean page is worse than no chip.
+function categoryChip(category) {
+  const label = categoryLabel(category);
+  return label ? `<span class="platform-tag tag-category">${escapeHtml(label)}</span>` : '';
 }
 
 function badgeClass(status) {
@@ -281,7 +289,7 @@ function renderCard(view) {
         <div class="meta-row">
           ${fresh ? `<span class="badge badge-new">${escapeHtml(t().newBadge)}</span>` : ''}
           <span class="${badgeClass(view.verification.status)}">${escapeHtml(text.verificationLabel)}</span>
-          <span class="platform-tag tag-category">${escapeHtml(categoryLabel(view.category))}</span>
+          ${categoryChip(view.category)}
           ${text.translated ? '' : `<span class="platform-tag tag-untranslated">${escapeHtml(t().untranslated)}</span>`}
         </div>
         <div class="mustknow-badge" title="${escapeHtml(t().scoreLabels.mustKnow)}">
@@ -409,7 +417,7 @@ async function renderDetail(id) {
         <p class="verification-reason">${escapeHtml(text.verificationReason)} (${escapeHtml(t().independentSources(view.verification.independentSourceCount))})</p>
         <div class="meta-row">
           ${view.platforms.map((p) => `<span class="platform-tag">${PLATFORM_LABELS[p] || p}</span>`).join('')}
-          <span class="platform-tag tag-category">${escapeHtml(categoryLabel(view.category))}</span>
+          ${categoryChip(view.category)}
         </div>
         <div class="card-links">
           <a class="source-link" href="${escapeHtml(view.sources[0].url)}" target="_blank" rel="noopener">${escapeHtml(t().source)}</a>

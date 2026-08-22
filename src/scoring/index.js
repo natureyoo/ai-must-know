@@ -10,6 +10,7 @@
 // influence score.
 
 import { assessVerification } from '../verification/index.js';
+import { storyActivityAt } from '../processing/dedup.js';
 
 const HOUR_MS = 3600 * 1000;
 
@@ -51,6 +52,24 @@ const VERIFICATION_CREDIBILITY_BASE = {
 const MUST_KNOW_WEIGHTS = { viral: 0.4, influence: 0.1, credibility: 0.2, impact: 0.3 };
 export const PRIMARY_SOURCE_BONUS = 10;
 const PRIMARY_PUBLISHER_TYPES = new Set(['company', 'research-org', 'government']);
+
+// Deliberately small. The four scores answer "how big is this"; the recency
+// window answers "is this from this week". Neither prefers today's news over
+// Monday's *inside* the window, so the top of the page turned over slowly
+// even when nothing was wrong with it. This tips ties toward the newer story
+// without letting a thin item outrank a major release: at 8 points it moves
+// a story past neighbours within ~8 points of it, no further.
+//
+// Decays to zero over 7 days and stays zero after, so it reshuffles the
+// 최근 7일 tab and leaves the 30일/전체 기간 ordering as it was — those tabs
+// are the "what was big" views and should not be re-sorted by clock.
+export const RECENCY_BONUS = 8;
+const RECENCY_DECAY_DAYS = 7;
+
+function recencyBonus(activityAt, now) {
+  const ageDays = (now.getTime() - activityAt) / (24 * HOUR_MS);
+  return RECENCY_BONUS * clamp(1 - ageDays / RECENCY_DECAY_DAYS, 0, 1);
+}
 
 function clamp(n, lo = 0, hi = 100) {
   return Math.max(lo, Math.min(hi, n));
@@ -232,27 +251,32 @@ function computeIndustryImpact(items, magnitudeByPlatform) {
   return { value: Math.round(value), rationale, rationaleKo };
 }
 
-function computeMustKnowScore({ viral, influence, credibility, impact }, items = []) {
+function computeMustKnowScore({ viral, influence, credibility, impact }, items = [], now = new Date()) {
   const hasPrimary = items.some((i) => PRIMARY_PUBLISHER_TYPES.has(i.publisherType));
   const bonus = hasPrimary ? PRIMARY_SOURCE_BONUS : 0;
+  const fresh = items.length ? recencyBonus(storyActivityAt(items), now) : 0;
+  const ageDays = items.length ? (now.getTime() - storyActivityAt(items)) / (24 * HOUR_MS) : 0;
   const value = clamp(
     viral.value * MUST_KNOW_WEIGHTS.viral +
       influence.value * MUST_KNOW_WEIGHTS.influence +
       credibility.value * MUST_KNOW_WEIGHTS.credibility +
       impact.value * MUST_KNOW_WEIGHTS.impact +
-      bonus,
+      bonus +
+      fresh,
   );
 
   const rationale =
     `Weighted blend: viral ${viral.value}×${MUST_KNOW_WEIGHTS.viral} + influence ${influence.value}×${MUST_KNOW_WEIGHTS.influence} + ` +
     `credibility ${credibility.value}×${MUST_KNOW_WEIGHTS.credibility} + impact ${impact.value}×${MUST_KNOW_WEIGHTS.impact}` +
     (bonus ? ` + ${bonus} primary-source bonus (official post/paper/release present)` : '') +
+    (fresh >= 0.5 ? ` + ${fresh.toFixed(1)} recency (last covered ${ageDays.toFixed(1)}d ago, decays to 0 at ${RECENCY_DECAY_DAYS}d)` : '') +
     ` = ${Math.round(value)}/100.`;
 
   const rationaleKo =
     `가중 합산: 화제성 ${viral.value}×${MUST_KNOW_WEIGHTS.viral} + 영향력 ${influence.value}×${MUST_KNOW_WEIGHTS.influence} + ` +
     `신뢰도 ${credibility.value}×${MUST_KNOW_WEIGHTS.credibility} + 중요도 ${impact.value}×${MUST_KNOW_WEIGHTS.impact}` +
     (bonus ? ` + 1차 출처 보너스 ${bonus}(공식 발표·논문·릴리스 있음)` : '') +
+    (fresh >= 0.5 ? ` + 최신성 ${fresh.toFixed(1)}(마지막 보도 ${ageDays.toFixed(1)}일 전, ${RECENCY_DECAY_DAYS}일이면 0)` : '') +
     ` = ${Math.round(value)}/100.`;
 
   return { value: Math.round(value), rationale, rationaleKo };
@@ -266,7 +290,7 @@ function scoreStory(story, { now, ratesByPlatform, magnitudeByPlatform }) {
   const influence = computePublisherInfluence(items);
   const credibility = computeCredibilityScore(verification);
   const impact = computeIndustryImpact(items, magnitudeByPlatform);
-  const mustKnow = computeMustKnowScore({ viral, influence, credibility, impact }, items);
+  const mustKnow = computeMustKnowScore({ viral, influence, credibility, impact }, items, now);
 
   return {
     storyId: story.id,

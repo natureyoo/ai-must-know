@@ -192,3 +192,18 @@ export function buildStories(items) {
 
   return Array.from(groups.values()).map(buildStory);
 }
+
+// How recently a real source covered this story — its "activity date".
+// Shared by the recency term in scoring and by the view the recency window
+// filters on (src/server), so the two can never disagree about how old a
+// story is.
+//
+// Hugging Face community re-uploads of an already-released model (GGUF
+// quants, "abliterated" forks) keep arriving for weeks and are not new
+// coverage: one of them held Qwen 3.8 27B at #1 of the 최근 7일 tab nine days
+// after release. Falls back to every item so a community upload that IS the
+// story still gets its own date.
+export function storyActivityAt(items) {
+  const covering = items.filter((i) => !(i.publisherType === 'community' && i.sourceType === 'hf'));
+  return (covering.length ? covering : items).reduce((max, i) => Math.max(max, Date.parse(i.publishedAt)), 0);
+}

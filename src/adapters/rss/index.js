@@ -38,8 +38,21 @@ export const DEFAULT_FEEDS = [
   { url: 'https://github.blog/changelog/label/copilot/feed/', source: 'GitHub Copilot Changelog', publisherType: 'company', category: 'products' },
   // Follows Chinese labs and capital moves the US press skips.
   { url: 'https://the-decoder.com/feed/', source: 'The Decoder', publisherType: 'independent-media', category: 'models' },
+  // Practitioner judgement — "the model is good, but it defaults to X" —
+  // which no vendor blog and no news desk writes. The /entries/ feed, not
+  // /everything/: the latter is his link blog, ~25 posts a fortnight of
+  // one-line commentary, and it would outweigh every lab feed here.
+  { url: 'https://simonwillison.net/atom/entries/', source: 'Simon Willison', publisherType: 'community', category: 'products' },
+  // The sceptical read on capability claims, from the Princeton group that
+  // writes it up properly. Rare (about one post a fortnight) and directly
+  // useful against a page whose other sources are mostly announcements.
+  { url: 'https://www.aisnakeoil.com/feed', source: 'AI Snake Oil', publisherType: 'research-org', category: 'research' },
   // Not here: r/LocalLLaMA's RSS — Reddit answers 429 to anything that is
   // not a browser after a couple of requests, so from CI it yields nothing.
+  // Also checked and rejected: semianalysis.com, developers.googleblog.com
+  // and 404media's AI tag feed all return entries this parser reads as zero
+  // items; NVIDIA's and Together's dev blogs are ~100 tutorial/marketing
+  // posts a fortnight. Papers moved to their own adapter (huggingface/papers).
 ];
 
 // Best-effort per-item category refinement from title/summary text — feed

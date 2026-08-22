@@ -11,6 +11,7 @@ import { fetchHackerNewsItems } from '../adapters/hackernews/index.js';
 import { fetchHnDiscussions } from '../adapters/hackernews/discussions.js';
 import { fetchGithubItems } from '../adapters/github/index.js';
 import { fetchHuggingFaceModels } from '../adapters/huggingface/index.js';
+import { fetchHuggingFacePapers } from '../adapters/huggingface/papers.js';
 import { fetchLabPosts } from '../adapters/labposts/index.js';
 import { assertValidSourceItem } from '../adapters/sourceItem.js';
 import { upsertSourceItems, countSourceItems } from '../db/index.js';
@@ -32,6 +33,7 @@ const LIVE_SOURCES = [
   { label: 'Hacker News', sourceType: 'hn', fetchLive: fetchHackerNewsItems },
   { label: 'GitHub', sourceType: 'github', fetchLive: fetchGithubItems },
   { label: 'Hugging Face', sourceType: 'hf', fetchLive: fetchHuggingFaceModels },
+  { label: 'Papers', sourceType: 'papers', fetchLive: fetchHuggingFacePapers },
 ];
 
 async function collectSource({ label, sourceType, fetchLive }, fixtures, log) {

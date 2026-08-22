@@ -203,3 +203,37 @@ describe('assessVerification', () => {
     }
   });
 });
+
+test('a lone preprint is the authors\' own claim, not independent corroboration', () => {
+  const paper = {
+    id: 'p1', sourceType: 'papers', source: 'arXiv:2608.19880', publisherType: 'research-org',
+    url: 'https://arxiv.org/abs/2608.19880', title: 'EnvHarness: agent learning', summary: 'We introduce...',
+    publishedAt: '2026-08-20T00:00:00.000Z', collectedAt: '2026-08-22T00:00:00.000Z', reactions: { upvotes: 236 },
+  };
+  const v = assessVerification({ id: 's', title: paper.title, items: [paper] });
+
+  assert.equal(v.status, 'official-claim', 'a preprint reviewed by nobody is not "Reported"');
+  assert.equal(v.independentSourceCount, 0);
+  assert.match(v.reasoningKo, /프리프린트/);
+});
+
+test('independent coverage of a preprint still corroborates it', () => {
+  const paper = {
+    id: 'p1', sourceType: 'papers', source: 'arXiv:2608.19880', publisherType: 'research-org',
+    url: 'https://arxiv.org/abs/2608.19880', title: 'EnvHarness: agent learning', summary: 'We introduce...',
+    publishedAt: '2026-08-20T00:00:00.000Z', collectedAt: '2026-08-22T00:00:00.000Z', reactions: { upvotes: 236 },
+  };
+  const coverage = (id, source, url) => ({
+    id, sourceType: 'rss', source, publisherType: 'independent-media', url,
+    title: 'EnvHarness agent learning benchmark', summary: 'Researchers report...',
+    publishedAt: '2026-08-21T00:00:00.000Z', collectedAt: '2026-08-22T00:00:00.000Z', reactions: {},
+  });
+  const v = assessVerification({
+    id: 's',
+    title: paper.title,
+    items: [paper, coverage('c1', 'MarkTechPost', 'https://marktechpost.com/a'), coverage('c2', 'The Decoder', 'https://the-decoder.com/b')],
+  });
+
+  assert.equal(v.status, 'verified');
+  assert.equal(v.independentSourceCount, 2, 'the preprint itself is not one of the two');
+});

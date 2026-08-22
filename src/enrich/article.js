@@ -16,21 +16,37 @@ const ENTITIES = {
   '&#39;': "'", '&apos;': "'", '&mdash;': '—', '&ndash;': '–', '&hellip;': '…',
 };
 
-export function htmlToText(html, { maxChars = 4000 } = {}) {
-  let text = String(html).replace(BLOCK_TAGS, ' ');
-
-  // Prefer the semantic body when the page marks one — it drops menus,
-  // related-article rails and cookie banners without needing a parser.
-  const body = text.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i) || text.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
-  if (body) text = body[1];
-
-  return text
+function stripToText(markup) {
+  return markup
     .replace(/<[^>]+>/g, ' ')
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
     .replace(/&[a-z]+;|&#39;/gi, (entity) => ENTITIES[entity.toLowerCase()] ?? ' ')
     .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxChars);
+    .trim();
+}
+
+// A semantic container is worth using only if it actually holds the article.
+// deepmind.google opens with a 2.5KB <article> teaser card whose text is 26
+// characters, and taking the first match meant its 14,000-character posts
+// reached the take as nothing at all — the take then correctly, and
+// uselessly, reported that the original could not be retrieved. Anything
+// under half the page's text is a card or a rail, not the body.
+const SEMANTIC_MIN_SHARE = 0.5;
+
+export function htmlToText(html, { maxChars = 4000 } = {}) {
+  const stripped = String(html).replace(BLOCK_TAGS, ' ');
+  const whole = stripToText(stripped);
+
+  // Prefer the semantic body when the page marks one — it drops menus,
+  // related-article rails and cookie banners without needing a parser.
+  for (const pattern of [/<article\b[^>]*>([\s\S]*?)<\/article>/i, /<main\b[^>]*>([\s\S]*?)<\/main>/i]) {
+    const match = stripped.match(pattern);
+    if (!match) continue;
+    const body = stripToText(match[1]);
+    if (body.length >= whole.length * SEMANTIC_MIN_SHARE) return body.slice(0, maxChars);
+  }
+
+  return whole.slice(0, maxChars);
 }
 
 const BLOCK_PAGE = /captcha|just a moment|access denied|enable javascript|verify you are human|are you a robot|subscribe to (?:continue|read)|sign in to continue/i;

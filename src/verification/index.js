@@ -49,6 +49,23 @@ import { canonicalUrl } from '../adapters/sourceItem.js';
 
 const CREDIBLE_INDEPENDENT_TYPES = ['independent-media', 'research-org', 'government'];
 
+// Preprint servers host what authors upload about their own work: no review,
+// no editor, no second party. Item 13's rule for company press releases is
+// exactly this case — the posting is primary evidence that the claim was
+// made, not that it holds — so a lone arXiv link must not read as
+// independent corroboration. It did: every single-source preprint came out
+// "Reported (1 independent source)" at credibility 65, above a DeepSeek
+// release announcement at 45, and that alone put seven papers in the top ten.
+const PREPRINT_HOSTS = /(^|\.)(arxiv\.org|openreview\.net|biorxiv\.org|medrxiv\.org|ssrn\.com)$/i;
+
+function isPreprint(item) {
+  try {
+    return PREPRINT_HOSTS.test(new URL(item.url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ponytail: lexical conflict markers, not semantic claim comparison —
 // upgrade to real NLP claim-diffing if fixture-scale phrasing stops catching
 // real disputes (mirrors the same tradeoff dedup.js makes for title similarity).
@@ -66,12 +83,19 @@ function groupByOrigin(items) {
   return [...groups.values()];
 }
 
+// The party whose own claim this is: the company announcing its release, or
+// the authors posting their own preprint. Either way the origin is primary
+// evidence of the claim, never corroboration of it.
+function isSelfAnnouncingOrigin(originItems) {
+  return originItems.some((it) => it.publisherType === 'company' || isPreprint(it));
+}
+
 function isCompanyOrigin(originItems) {
-  return originItems.some((it) => it.publisherType === 'company');
+  return isSelfAnnouncingOrigin(originItems);
 }
 
 function isCredibleIndependentOrigin(originItems) {
-  return !isCompanyOrigin(originItems) && originItems.some((it) => CREDIBLE_INDEPENDENT_TYPES.includes(it.publisherType));
+  return !isSelfAnnouncingOrigin(originItems) && originItems.some((it) => CREDIBLE_INDEPENDENT_TYPES.includes(it.publisherType));
 }
 
 function originNames(origins) {
@@ -156,13 +180,13 @@ export function assessVerification(story) {
     status = 'official-claim';
     reasoning =
       `Official claim: only the announcing part${companyOrigins.length > 1 ? 'ies' : 'y'} ` +
-      `(${originNames(companyOrigins)}) ${companyOrigins.length > 1 ? 'have' : 'has'} published this. A company's own ` +
-      `announcement is primary evidence that it was made, not that its claims are independently verified — no independent ` +
-      `source corroborates it yet.`;
+      `(${originNames(companyOrigins)}) ${companyOrigins.length > 1 ? 'have' : 'has'} published this. An announcement or ` +
+      `preprint from the party making the claim is primary evidence that it was made, not that its claims are ` +
+      `independently verified — no independent source corroborates it yet.`;
     reasoningKo =
-      `공식 발표: 당사자(${originNames(companyOrigins)})만 이 내용을 발표했습니다. 기업의 자체 발표는 ` +
-      `"그런 발표가 있었다"는 사실의 1차 근거일 뿐, 발표 안의 주장이 독립적으로 검증됐다는 뜻은 아닙니다. ` +
-      `아직 이를 뒷받침하는 독립 출처가 없습니다.`;
+      `공식 발표: 당사자(${originNames(companyOrigins)})만 이 내용을 발표했습니다. 당사자의 자체 발표나 ` +
+      `저자가 올린 프리프린트는 "그런 주장이 나왔다"는 사실의 1차 근거일 뿐, 그 주장이 독립적으로 검증됐다는 ` +
+      `뜻은 아닙니다. 아직 이를 뒷받침하는 독립 출처가 없습니다.`;
   } else {
     status = 'unverified';
     reasoning =

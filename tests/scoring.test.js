@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { scoreStories, scoreStoryStandalone, PRIMARY_SOURCE_BONUS } from '../src/scoring/index.js';
+import { scoreStories, scoreStoryStandalone, PRIMARY_SOURCE_BONUS, RECENCY_BONUS } from '../src/scoring/index.js';
 import { buildStories } from '../src/processing/dedup.js';
 import { getFixtureItems } from '../src/adapters/fixtures/index.js';
 
@@ -175,4 +175,36 @@ describe('scoreStories', () => {
       for (const v of values) assert.ok(mustKnow.rationale.includes(String(v)));
     }
   });
+});
+
+test('recency tips ties toward the newer story without outranking a bigger one', () => {
+  const now = new Date('2026-08-22T00:00:00.000Z');
+  const item = (id, publishedAt, points) => ({
+    id, sourceType: 'hn', source: 'Hacker News', publisherType: 'company',
+    url: `https://example.com/${id}`, title: `Item ${id}`, summary: '', category: 'models',
+    publishedAt, collectedAt: now.toISOString(), reactions: { points },
+  });
+  const score = (items) => scoreStoryStandalone({ id: 's', title: items[0].title, items }, { now }).scores.mustKnow.value;
+
+  const today = score([item('a', '2026-08-21T12:00:00.000Z', 100)]);
+  const weekOld = score([item('b', '2026-08-15T00:00:00.000Z', 100)]);
+  assert.ok(today > weekOld, 'same story, published today, must rank above the seven-day-old one');
+  assert.ok(today - weekOld <= RECENCY_BONUS, `recency must not move a story more than ${RECENCY_BONUS} points`);
+
+  const stale = score([item('c', '2026-07-01T00:00:00.000Z', 100)]);
+  const staler = score([item('d', '2026-06-01T00:00:00.000Z', 100)]);
+  assert.equal(stale, staler, 'past the decay window recency stops applying — 30일/전체 tabs keep their order');
+});
+
+test('the recency term explains itself on the card, in both languages', () => {
+  const now = new Date('2026-08-22T00:00:00.000Z');
+  const items = [{
+    id: 'a', sourceType: 'hn', source: 'Hacker News', publisherType: 'company',
+    url: 'https://example.com/a', title: 'Item a', summary: '', category: 'models',
+    publishedAt: '2026-08-21T00:00:00.000Z', collectedAt: now.toISOString(), reactions: { points: 100 },
+  }];
+  const { mustKnow } = scoreStoryStandalone({ id: 's', title: 'Item a', items }, { now }).scores;
+
+  assert.match(mustKnow.rationaleKo, /최신성 \d/);
+  assert.match(mustKnow.rationale, /recency \(last covered/);
 });

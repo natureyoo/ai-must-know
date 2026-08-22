@@ -9,7 +9,7 @@ import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getAllSourceItems, getTranslations, latestCollectedAt } from '../db/index.js';
 import { getFixtureItems } from '../adapters/fixtures/index.js';
-import { buildStories } from '../processing/dedup.js';
+import { buildStories, storyActivityAt } from '../processing/dedup.js';
 import { scoreStories } from '../scoring/index.js';
 import { CATEGORIES } from '../adapters/sourceItem.js';
 
@@ -49,16 +49,9 @@ export function buildStoryView(story, scored, translations = new Map()) {
   });
   const canonical = items[0];
   const platforms = [...new Set(items.map((i) => i.sourceType))];
-  // How recently a real source covered this — what the recency window
-  // (public/logic.js withinDays) and the NEW badge key on. Community
-  // re-uploads of an already-released model (GGUF quants, "abliterated"
-  // forks) keep landing on Hugging Face for weeks and are not new coverage:
-  // one of them held Qwen 3.8 27B at #1 of the 최근 7일 tab nine days after
-  // release. Fall back to every item so a community upload that IS the story
-  // still gets its own date.
-  const covering = items.filter((i) => !(i.publisherType === 'community' && i.sourceType === 'hf'));
-  const latestPublishedAt = (covering.length ? covering : items)
-    .reduce((max, i) => Math.max(max, Date.parse(i.publishedAt)), 0);
+  // What the recency window (public/logic.js withinDays), the NEW badge and
+  // scoring's recency term all key on — one definition, in dedup.js.
+  const latestPublishedAt = storyActivityAt(items);
   // When the story first broke, across every source that covers it. The card
   // shows this rather than latestPublishedAt: a follow-up repost should not
   // make a three-day-old story read as published today.

@@ -84,3 +84,28 @@ test('a bot wall or subscription wall long enough to pass the length check is st
   const text = await fetchArticleText('https://example.com/x', { fetchImpl: response(page(`<article>${wall}</article>`)) });
   assert.equal(text, '', 'the take must never be written from a CAPTCHA page');
 });
+
+test('a teaser <article> card does not gut the real body around it', () => {
+  // deepmind.google's shape: a small <article> card in a rail, and the post
+  // itself outside it. Committing to the first <article> match reduced its
+  // 14,000-character posts to 26 characters, and the AI take then reported
+  // — correctly, and uselessly — that the original could not be retrieved.
+  const body = 'Gemini Robotics 2 reaches 91% on the whole-body manipulation suite. '.repeat(20);
+  const page = `<html><body>
+    <article><h3>Related</h3><a href="/x">Read more</a></article>
+    <div class="content"><p>${body}</p></div>
+  </body></html>`;
+
+  assert.match(htmlToText(page), /whole-body manipulation suite/);
+  assert.ok(htmlToText(page).length > 1000, 'the body, not the 30-character teaser card');
+});
+
+test('a real <article> body is still preferred over the surrounding chrome', () => {
+  const body = 'The model was trained on 4.2 trillion tokens. '.repeat(30);
+  const page = `<html><body><nav>Home Products Pricing Careers Blog</nav>
+    <article><p>${body}</p></article>
+    <div class="rail">Sign up for our newsletter</div></body></html>`;
+
+  assert.match(htmlToText(page), /4\.2 trillion tokens/);
+  assert.doesNotMatch(htmlToText(page), /newsletter/, 'the semantic body still wins when it holds the article');
+});
