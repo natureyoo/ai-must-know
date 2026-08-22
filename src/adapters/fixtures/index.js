@@ -323,6 +323,38 @@ const FIXTURE_TEMPLATES = [
     collectedDelayHours: 0.5,
     reactions: { shares: 480, estimatedReads: 33000 },
   },
+  // The `papers` source needs its own fixture or offline mode has no
+  // research at all — collect falls back per source, so an empty fixture set
+  // for one adapter silently removes that category from the demo. Two, so
+  // the ranking has something to order.
+  {
+    id: 'paper-2608-agent-harness-bench',
+    sourceType: 'papers',
+    source: 'arXiv:2608.11024',
+    publisherType: 'research-org',
+    category: 'research',
+    title: 'Long-Horizon Agent Benchmarks Overstate Tool-Use Gains',
+    url: 'https://arxiv.org/abs/2608.11024',
+    summary:
+      'We re-run five long-horizon agent benchmarks with the harness held fixed and find that 30-60% of reported tool-use improvement is attributable to scaffold differences rather than to the model.',
+    hoursAgo: 30,
+    collectedDelayHours: 0.3,
+    reactions: { upvotes: 212, comments: 14 },
+  },
+  {
+    id: 'paper-2608-quantization-recovery',
+    sourceType: 'papers',
+    source: 'arXiv:2608.10877',
+    publisherType: 'research-org',
+    category: 'research',
+    title: 'What FP8 Quantization Actually Costs on Multi-Step Reasoning',
+    url: 'https://arxiv.org/abs/2608.10877',
+    summary:
+      'A per-task study of FP8 and INT4 weight quantization across seven open-weight models. Single-step accuracy is nearly preserved; multi-step reasoning chains lose 4-11 points, concentrated in the final steps.',
+    hoursAgo: 52,
+    collectedDelayHours: 0.3,
+    reactions: { upvotes: 96, comments: 8 },
+  },
 ];
 
 function buildItem(template, now) {

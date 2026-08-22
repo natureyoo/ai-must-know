@@ -1,7 +1,8 @@
 # AI Must Know
 
 Local AI news curation dashboard. Collects AI news from official RSS/feeds,
-Hacker News, GitHub, and the Hugging Face Hub, merges duplicate coverage into
+Hacker News, GitHub, the Hugging Face Hub and Hugging Face Daily Papers,
+merges duplicate coverage into
 stories, and scores
 each story on virality, publisher influence, credibility, and industry
 impact — with a visible verification status for every claim.
@@ -237,7 +238,15 @@ and GitHub's public search API works without one.
   which cover open-weight Chinese releases far more closely than the US tech
   press) and the **GitHub Copilot changelog**, the one first-party feed of
   distribution events ("Grok 4.6 is now available in GitHub Copilot").
-  Hand-rolled regex XML parsing (no dependency).
+  Hand-rolled regex XML parsing (no dependency). Also **Simon Willison**
+  (the `/atom/entries/` long-form feed, not `/everything/` — the latter is a
+  link blog of ~25 one-line posts a fortnight that would outweigh every lab
+  feed here) and **AI Snake Oil**, for practitioner judgement and a sceptical
+  read on capability claims, which no vendor blog and no news desk writes.
+  Checked and rejected as unusable or as noise: semianalysis.com,
+  developers.googleblog.com and 404 Media's AI tag feed all parse to zero
+  items here; NVIDIA's and Together's dev blogs are ~100 tutorial and
+  marketing posts a fortnight.
 - **Hugging Face trending models** (`src/adapters/huggingface/index.js`):
   the public Hub API, no key. This is what actually carries open-weight
   releases — Kimi, Qwen, DeepSeek, MiniMax, GLM, Llama — because those labs
@@ -245,6 +254,18 @@ and GitHub's public search API works without one.
   Uploads under a known org namespace (`moonshotai/`, `deepseek-ai/`,
   `Qwen/`, …) count as that lab publishing its own release; anything else is
   a community re-upload and needs far more traction to qualify as news.
+- **Hugging Face Daily Papers** (`src/adapters/huggingface/papers.js`): the
+  public papers API, no key. Research was the one category with no source of
+  its own — papers reached the dashboard only when Hacker News happened to
+  submit an arXiv link. The raw arXiv firehose is the obvious fix and the
+  wrong one (cs.LG alone is hundreds of unranked submissions a day); Daily
+  Papers is that firehose already filtered by people who read it, and the
+  upvote count gives the viral score something real to rank on. Items carry
+  their own `papers` sourceType, because paper upvotes (tens) and model
+  downloads (millions) cannot share a percentile pool. The item's URL is the
+  **arXiv abstract**, not the Hugging Face page: that is the primary source,
+  it is what HN submits (so dedup merges the two by canonical URL), and
+  unlike most of the web it serves plain HTML the article reader can parse.
 - **Hacker News** (`src/adapters/hackernews/index.js`): the Algolia search
   API, no key needed. Every story above 50 points in the last 36 hours —
   not the front page at the minute the collector runs, which missed anything
@@ -314,6 +335,16 @@ a plain-language rationale explaining the specific numbers behind it.
   influence ×0.1 + credibility ×0.2 + impact ×0.3, plus a flat +10 when a
   primary source (the org's own post, paper or release) is present — so
   influence alone cannot dominate the ranking.
+- **Recency**: up to **+8**, decaying linearly to zero over 7 days from the
+  story's activity date. Deliberately small. The four scores answer "how big
+  is this" and the window answers "is this from this week"; neither preferred
+  today's news over Monday's *inside* the window, so the top of the page
+  turned over slowly even when nothing was wrong with it. At 8 points it
+  reorders neighbours and cannot lift a thin item over a major release.
+  Because it is zero past 7 days, the 최근 30일 and 전체 기간 tabs keep the
+  ordering they had — those views answer "what was big", not "what is new".
+  The term appears in each card's 왜 이 점수인가 rationale with the story's
+  measured age, in both languages.
 
 Percentiles are always computed within the current collection batch (e.g.
 "this HN item's rate vs. every other HN item just collected"), not against
@@ -374,9 +405,28 @@ are not the same axis:
 - **Dispute detection is lexical, not a real claim-diff**: it looks for
   conflict-language patterns ("disputed", "denies", "fails to reproduce",
   etc.) between items, not an actual comparison of what each source claims.
-- **RSS coverage is 3 fixed official feeds**, not a general web crawl —
-  broader coverage would mean adding more feeds to
-  `src/adapters/rss/index.js`.
+- **RSS coverage is a fixed hand-checked feed list**, not a general web
+  crawl — broader coverage means adding feeds to
+  `src/adapters/rss/index.js`, each verified to return items through this
+  parser before it goes in.
+- **openai.com cannot be read server-side**: it answers 403 to every
+  non-browser fetch — plain, a full Chrome header set, Googlebot and curl
+  alike. Its RSS feed still supplies discovery, so OpenAI stories appear and
+  rank normally, but the AI take for them is written from a title and a
+  ~155-character feed description, and says so rather than inventing
+  context. Routing the page's content through a third-party reader proxy
+  would fix it and is deliberately not done. `platform.claude.com`,
+  `openrouter.ai`, `qwen.ai` and `z.ai` are JS-only shells with the same
+  effect for the same reason.
+- **The papers cap is a count, not a quality bar**: viral and impact are
+  percentiles *within a platform's own pool*, so a small curated pool puts
+  its own best items near the 95th percentile regardless of how they compare
+  to the week's model releases. Uncapped, Daily Papers took ten of the top
+  twenty-four slots; it is capped at the 12 most-upvoted of the window,
+  which lands it at about four. On a quiet research week that cap still
+  admits 12 low-upvote papers and ranks them the same way — what would
+  actually fix it is cross-platform calibration of the viral score, not
+  a threshold.
 - **GitHub "trending" is an approximation**: there is no official trending
   endpoint, so this uses topic + recency + star-sort via the search API,
   and cannot reliably distinguish an official org repo from an individual's

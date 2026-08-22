@@ -90,10 +90,6 @@ function isSelfAnnouncingOrigin(originItems) {
   return originItems.some((it) => it.publisherType === 'company' || isPreprint(it));
 }
 
-function isCompanyOrigin(originItems) {
-  return isSelfAnnouncingOrigin(originItems);
-}
-
 function isCredibleIndependentOrigin(originItems) {
   return !isSelfAnnouncingOrigin(originItems) && originItems.some((it) => CREDIBLE_INDEPENDENT_TYPES.includes(it.publisherType));
 }
@@ -132,7 +128,7 @@ function findDisputePair(items, origins) {
 export function assessVerification(story) {
   const items = story.items;
   const origins = groupByOrigin(items);
-  const companyOrigins = origins.filter(isCompanyOrigin);
+  const selfAnnounced = origins.filter(isSelfAnnouncingOrigin);
   const credibleIndependentOrigins = origins.filter(isCredibleIndependentOrigin);
   const independentNames = independentSourceNames(credibleIndependentOrigins);
   const independentSourceCount = independentNames.size;
@@ -164,10 +160,10 @@ export function assessVerification(story) {
     reasoning =
       `Verified: ${independentSourceCount} independent, non-company sources ` +
       `(${independentNamesLabel}) corroborate this` +
-      (companyOrigins.length > 0 ? `, beyond the original announcement from ${originNames(companyOrigins)}.` : '.');
+      (selfAnnounced.length > 0 ? `, beyond the original announcement from ${originNames(selfAnnounced)}.` : '.');
     reasoningKo =
       `검증됨: 당사자가 아닌 독립 출처 ${independentSourceCount}곳(${independentNamesLabel})이 같은 내용을 뒷받침합니다` +
-      (companyOrigins.length > 0 ? ` (${originNames(companyOrigins)}의 원 발표와는 별개).` : '.');
+      (selfAnnounced.length > 0 ? ` (${originNames(selfAnnounced)}의 원 발표와는 별개).` : '.');
   } else if (independentSourceCount === 1) {
     status = 'reported';
     reasoning =
@@ -176,15 +172,15 @@ export function assessVerification(story) {
     reasoningKo =
       `보도됨: 신뢰할 만한 독립 보도(${independentNamesLabel})가 있지만 독립 출처가 1곳뿐입니다. ` +
       `검증됨에 필요한 2곳에 못 미쳐 1차 근거가 아직 부족합니다.`;
-  } else if (companyOrigins.length > 0) {
+  } else if (selfAnnounced.length > 0) {
     status = 'official-claim';
     reasoning =
-      `Official claim: only the announcing part${companyOrigins.length > 1 ? 'ies' : 'y'} ` +
-      `(${originNames(companyOrigins)}) ${companyOrigins.length > 1 ? 'have' : 'has'} published this. An announcement or ` +
+      `Official claim: only the announcing part${selfAnnounced.length > 1 ? 'ies' : 'y'} ` +
+      `(${originNames(selfAnnounced)}) ${selfAnnounced.length > 1 ? 'have' : 'has'} published this. An announcement or ` +
       `preprint from the party making the claim is primary evidence that it was made, not that its claims are ` +
       `independently verified — no independent source corroborates it yet.`;
     reasoningKo =
-      `공식 발표: 당사자(${originNames(companyOrigins)})만 이 내용을 발표했습니다. 당사자의 자체 발표나 ` +
+      `공식 발표: 당사자(${originNames(selfAnnounced)})만 이 내용을 발표했습니다. 당사자의 자체 발표나 ` +
       `저자가 올린 프리프린트는 "그런 주장이 나왔다"는 사실의 1차 근거일 뿐, 그 주장이 독립적으로 검증됐다는 ` +
       `뜻은 아닙니다. 아직 이를 뒷받침하는 독립 출처가 없습니다.`;
   } else {
