@@ -45,7 +45,10 @@ const html = readFileSync(join(root, 'public', 'index.html'), 'utf8')
   .replace(/(href|src)="\/([^"]+)"/g, '$1="./$2"')
   .replace('<script type="module" src="./app.js"></script>',
     '<script src="./static-api.js"></script>\n<script type="module" src="./app.js"></script>')
-  .replace('<a href="./api/stories">/api/stories</a>', '<a href="./data/stories.json">수집된 스냅샷</a>');
+  // Only the href — the visible label is picked by public/app.js from the
+  // active language. Writing Korean in here left the English page reading
+  // "…returned by 수집된 스냅샷."
+  .replace('<a href="./api/stories">', '<a href="./data/stories.json">');
 writeFileSync(join(outDir, 'index.html'), html);
 
 const generatedAt = new Date().toISOString();

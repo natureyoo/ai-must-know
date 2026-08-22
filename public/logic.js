@@ -43,7 +43,12 @@ export function localized(view, lang = 'ko') {
     gist: (ko && view.gistKo) || '',
     verificationReason: (ko && view.verification.reasoningKo) || view.verification.reasoning,
     verificationLabel: (ko && view.verification.statusLabelKo) || view.verification.statusLabel,
-    translated: Boolean(ko && view.titleKo),
+    // Only meaningful in Korean, where it warns that a card is still showing
+    // the English original. In English mode the original IS what was asked
+    // for, so the flag stays true — otherwise every card in the English view
+    // carried an "original (EN)" chip stating the obvious, and it wrapped the
+    // badge row onto a second line on every card.
+    translated: ko ? Boolean(view.titleKo) : true,
   };
 }
 

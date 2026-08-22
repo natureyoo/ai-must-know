@@ -73,7 +73,7 @@ test('English mode always shows the untranslated original, gist included', () =>
   assert.equal(text.summary, 'OpenAI released GPT-5.2 today.');
   assert.equal(text.gist, '', 'the one-line gist only exists in Korean');
   assert.equal(text.verificationLabel, 'Verified');
-  assert.equal(text.translated, false);
+  assert.equal(text.translated, true, 'the "original (EN)" chip warns a Korean reader; in English it states the obvious on every card');
 });
 
 test('a story with no Korean row falls back to English rather than rendering blank', () => {

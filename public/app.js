@@ -57,6 +57,7 @@ const STRINGS = {
     askTitle: (name) => `${name}에서 이 스토리에 대해 이어서 질문하기 (새 탭)`,
     footerPre: '모든 요약과 점수는 ',
     footerPost: ' 가 반환하는 실데이터를 기반으로 렌더링됩니다.',
+    footerLinkSnapshot: '수집된 스냅샷',
     langToggle: 'EN',
     scoreLabels: {
       mustKnow: 'Must Know',
@@ -114,6 +115,7 @@ const STRINGS = {
     askTitle: (name) => `Continue with ${name} about this story (new tab)`,
     footerPre: 'Every summary and score is rendered from live data returned by ',
     footerPost: '.',
+    footerLinkSnapshot: 'the collected snapshot',
     langToggle: '한국어',
     scoreLabels: {
       mustKnow: 'Must Know',
@@ -485,7 +487,15 @@ function applyLanguage() {
   // Preserve whatever href the snapshot link already has — the static build
   // (scripts/build-static.js) rewrites it to point at the JSON snapshot.
   const link = footerNote.querySelector('a');
-  footerNote.innerHTML = `${escapeHtml(t().footerPre)}<a href="${escapeHtml(link.getAttribute('href'))}">${escapeHtml(link.textContent)}</a>${escapeHtml(t().footerPost)}`;
+  const href = link.getAttribute('href');
+  // Two deployments, two labels: the Node server answers /api/stories live,
+  // while the Pages build points at a flat JSON snapshot. The label used to
+  // be written into index.html by scripts/build-static.js, which meant the
+  // deployed English page read "…returned by 수집된 스냅샷." Only the href is
+  // rewritten at build time now; the wording comes from STRINGS like every
+  // other piece of chrome, so it follows the language toggle.
+  const label = href.endsWith('.json') ? t().footerLinkSnapshot : '/api/stories';
+  footerNote.innerHTML = `${escapeHtml(t().footerPre)}<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>${escapeHtml(t().footerPost)}`;
 
   renderAsOf();
 }

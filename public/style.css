@@ -52,27 +52,32 @@ a { color: var(--accent); }
   color: var(--text);
 }
 
-.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
-#theme-toggle {
-  border: 1px solid var(--border);
-  background: var(--surface-alt);
-  color: var(--text);
-  border-radius: 999px;
-  width: 36px;
-  height: 36px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-
+/* Both toggles keep their size: the as-of stamp next to them is a sentence
+   whose length changes with language ("Data as of Aug 22, 2026, 10:43 AM
+   KST · 6h ago" is far wider than the Korean), and as flex items with the
+   default shrink they gave that sentence their own width — which clipped the
+   「어」 off the 한국어 button in the English view. The stamp shrinks instead. */
+#theme-toggle,
 #lang-toggle {
   border: 1px solid var(--border);
   background: var(--surface-alt);
   color: var(--text);
   border-radius: 999px;
   height: 36px;
-  padding: 0 14px;
   cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+#theme-toggle {
+  width: 36px;
+  font-size: 1rem;
+}
+
+#lang-toggle {
+  padding: 0 14px;
   font-size: 0.8rem;
   font-weight: 700;
 }
@@ -81,6 +86,7 @@ a { color: var(--accent); }
    topbar because a static deploy can be opened long after it was built. */
 .data-asof {
   margin: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
